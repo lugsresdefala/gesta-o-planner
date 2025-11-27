@@ -3,6 +3,19 @@ import { CalendarManager } from "./maternityCalendar";
 
 export { CalendarManager };
 
+// Constants for gestational age validation
+const MAX_GESTATIONAL_DAYS = 294; // 42 weeks in days
+
+// Validation helper: Check if date is in the future
+const isFutureDate = (date: Date, referenceDate: Date): boolean => {
+  return date.getTime() > referenceDate.getTime();
+};
+
+// Validation helper: Check if gestational age is within valid bounds
+const isValidGestationalAge = (totalDays: number): boolean => {
+  return totalDays >= 0 && totalDays <= MAX_GESTATIONAL_DAYS;
+};
+
 // Simulate processing delay for demonstration
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -239,7 +252,7 @@ const calculateGestationalAge = (
     if (!usgDate) return null;
 
     // Validation: Future date
-    if (usgDate.getTime() > referenceDate.getTime()) {
+    if (isFutureDate(usgDate, referenceDate)) {
       console.warn(`Data USG é futura: ${usgData}`);
       return null;
     }
@@ -253,15 +266,9 @@ const calculateGestationalAge = (
     );
     const currentTotalDays = usgTotalDays + daysSinceUSG;
 
-    // Validation: GA cannot exceed 42 weeks (294 days)
-    if (currentTotalDays > 294) {
-      console.warn(`IG por USG excede 42 semanas: ${currentTotalDays} dias`);
-      return null;
-    }
-
-    // Validation: GA cannot be negative
-    if (currentTotalDays < 0) {
-      console.warn(`IG por USG é negativa: ${currentTotalDays} dias`);
+    // Validation: GA must be within valid bounds
+    if (!isValidGestationalAge(currentTotalDays)) {
+      console.warn(`IG por USG fora dos limites válidos: ${currentTotalDays} dias`);
       return null;
     }
 
@@ -283,12 +290,12 @@ const calculateGestationalAge = (
     if (!dumDate || !usgDate) return null;
 
     // Validation: Future dates
-    if (dumDate.getTime() > referenceDate.getTime()) {
+    if (isFutureDate(dumDate, referenceDate)) {
       console.warn(`DUM é data futura: ${dumData}`);
       return null;
     }
     
-    if (usgDate.getTime() > referenceDate.getTime()) {
+    if (isFutureDate(usgDate, referenceDate)) {
       console.warn(`Data USG é futura: ${usgData}`);
       return null;
     }
@@ -329,15 +336,9 @@ const calculateGestationalAge = (
     );
     const currentTotalDays = chosenGA + daysSinceChosen;
     
-    // Validation: GA cannot exceed 42 weeks (294 days)
-    if (currentTotalDays > 294) {
-      console.warn(`IG calculada excede 42 semanas: ${currentTotalDays} dias`);
-      return null;
-    }
-    
-    // Validation: GA cannot be negative
-    if (currentTotalDays < 0) {
-      console.warn(`IG calculada é negativa: ${currentTotalDays} dias`);
+    // Validation: GA must be within valid bounds
+    if (!isValidGestationalAge(currentTotalDays)) {
+      console.warn(`IG calculada fora dos limites válidos: ${currentTotalDays} dias`);
       return null;
     }
 
@@ -357,7 +358,7 @@ const calculateGestationalAge = (
     if (!dumDate) return null;
 
     // Validation: Future date
-    if (dumDate.getTime() > referenceDate.getTime()) {
+    if (isFutureDate(dumDate, referenceDate)) {
       console.warn(`DUM é data futura: ${dumData}`);
       return null;
     }
@@ -366,15 +367,9 @@ const calculateGestationalAge = (
       (referenceDate.getTime() - dumDate.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Validation: GA cannot exceed 42 weeks (294 days)
-    if (daysSinceDUM > 294) {
-      console.warn(`IG por DUM excede 42 semanas: ${daysSinceDUM} dias`);
-      return null;
-    }
-
-    // Validation: GA cannot be negative
-    if (daysSinceDUM < 0) {
-      console.warn(`IG por DUM é negativa: ${daysSinceDUM} dias`);
+    // Validation: GA must be within valid bounds
+    if (!isValidGestationalAge(daysSinceDUM)) {
+      console.warn(`IG por DUM fora dos limites válidos: ${daysSinceDUM} dias`);
       return null;
     }
 
