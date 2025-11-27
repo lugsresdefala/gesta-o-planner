@@ -13,7 +13,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CheckCircle2, XCircle, Clock, AlertCircle, Download, FileX } from "lucide-react";
 import { toast } from "sonner";
-import { exportUnscheduledPatients } from "@/utils/excelExporter";
+import { exportUnscheduledPatients, exportAllResults } from "@/utils/excelExporter";
 
 interface ProcessingResultsProps {
   results: ProcessedResult[];
@@ -56,47 +56,9 @@ const ProcessingResults = ({ results, patients }: ProcessingResultsProps) => {
     erro: results.filter((r) => r.status === "ERRO").length,
   };
 
-  const handleExportCSV = () => {
-    // Create CSV content
-    const headers = [
-      "ID",
-      "Nome",
-      "Carteirinha",
-      "Maternidade",
-      "Status",
-      "IG Atual",
-      "Método IG",
-      "IG Recomendada",
-      "Data Ideal",
-      "Data Agendamento",
-      "Observações",
-    ];
-
-    const rows = results.map((result) => [
-      result.id,
-      result.nome,
-      result.carteirinha,
-      result.maternidade_desejada,
-      result.status,
-      result.ig_atual || "",
-      result.metodo_ig || "",
-      result.ig_recomendada || "",
-      result.data_ideal?.toLocaleDateString("pt-BR") || "",
-      result.data_agendamento?.toLocaleDateString("pt-BR") || "",
-      result.observacoes.join("; "),
-    ]);
-
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `resultados_agendamento_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-
-    toast.success("CSV exportado com sucesso!");
+  const handleExportExcel = () => {
+    exportAllResults(results);
+    toast.success("Relatório completo exportado com sucesso!");
   };
 
   const handleExportUnscheduled = () => {
@@ -173,9 +135,9 @@ const ProcessingResults = ({ results, patients }: ProcessingResultsProps) => {
                   Exportar Não Agendados
                 </Button>
               )}
-              <Button onClick={handleExportCSV} variant="outline" size="sm">
+              <Button onClick={handleExportExcel} size="sm">
                 <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
+                Exportar Relatório Completo
               </Button>
             </div>
           </div>
@@ -213,7 +175,18 @@ const ProcessingResults = ({ results, patients }: ProcessingResultsProps) => {
                         <TableCell className="font-medium">{result.id}</TableCell>
                         <TableCell className="font-medium">{result.nome}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{result.maternidade_desejada}</Badge>
+                          {result.maternidade_alocada ? (
+                            <div className="space-y-1">
+                              <Badge variant="default">{result.maternidade_alocada}</Badge>
+                              {result.maternidade_alocada !== result.maternidade_desejada && (
+                                <p className="text-xs text-muted-foreground">
+                                  Desejada: {result.maternidade_desejada}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <Badge variant="outline">{result.maternidade_desejada || "N/A"}</Badge>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           {result.ig_atual || "-"}
