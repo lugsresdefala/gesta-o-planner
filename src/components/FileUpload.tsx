@@ -2,38 +2,48 @@ import { useCallback, useState } from "react";
 import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PatientData } from "@/types/patient";
+import { SimplifiedPatientData } from "@/types/simplifiedPatient";
 import { toast } from "sonner";
 
 interface FileUploadProps {
   onUpload: (data: PatientData[]) => void;
+  onSimplifiedUpload?: (data: SimplifiedPatientData[]) => void;
 }
 
-const FileUpload = ({ onUpload }: FileUploadProps) => {
+const FileUpload = ({ onUpload, onSimplifiedUpload }: FileUploadProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileStatus, setFileStatus] = useState<"idle" | "success" | "error">("idle");
 
-  const parseTSV = (text: string): PatientData[] => {
+  const parseTSV = (text: string): { type: "detailed" | "simplified"; data: any[] } => {
     const lines = text.split("\n").filter(line => line.trim());
     if (lines.length < 2) {
       throw new Error("Arquivo TSV inválido: deve conter cabeçalho e dados");
     }
 
-    const headers = lines[0].split("\t");
-    const data: PatientData[] = [];
+    const headers = lines[0].split("\t").map(h => h.trim());
+    const data: any[] = [];
+
+    // Detect format type based on headers
+    const isSimplified = headers.includes("Nome") && 
+                        headers.includes("IG_Atual") && 
+                        headers.includes("Data_Agendada");
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split("\t");
       const row: any = {};
       
       headers.forEach((header, index) => {
-        row[header.trim()] = values[index]?.trim() || "";
+        row[header] = values[index]?.trim() || "";
       });
       
-      data.push(row as PatientData);
+      data.push(row);
     }
 
-    return data;
+    return {
+      type: isSimplified ? "simplified" : "detailed",
+      data
+    };
   };
 
   const handleFile = useCallback(
@@ -50,14 +60,26 @@ const FileUpload = ({ onUpload }: FileUploadProps) => {
       reader.onload = (e) => {
         try {
           const text = e.target?.result as string;
-          const patients = parseTSV(text);
+          const result = parseTSV(text);
           
-          if (patients.length === 0) {
+          if (result.data.length === 0) {
             throw new Error("Nenhum paciente encontrado no arquivo");
           }
 
           setFileStatus("success");
-          onUpload(patients);
+          
+          if (result.type === "simplified") {
+            if (onSimplifiedUpload) {
+              onSimplifiedUpload(result.data as SimplifiedPatientData[]);
+              toast.success(`${result.data.length} pacientes carregados (formato simplificado)`);
+            } else {
+              toast.error("Upload de formato simplificado não suportado nesta visualização");
+              setFileStatus("error");
+            }
+          } else {
+            onUpload(result.data as PatientData[]);
+            toast.success(`${result.data.length} pacientes carregados (formato detalhado)`);
+          }
         } catch (error) {
           console.error("Erro ao processar arquivo:", error);
           toast.error("Erro ao processar arquivo TSV");
