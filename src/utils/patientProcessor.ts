@@ -1,17 +1,23 @@
 import { PatientData, ProcessedResult, GestationalAge } from "@/types/patient";
+import { CalendarManager } from "./maternityCalendar";
+
+export { CalendarManager };
 
 // Simulate processing delay for demonstration
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const processPatients = async (patients: PatientData[]): Promise<ProcessedResult[]> => {
+export const processPatients = async (
+  patients: PatientData[]
+): Promise<{ results: ProcessedResult[]; calendarManager: CalendarManager }> => {
   const results: ProcessedResult[] = [];
   const referenceDate = new Date();
+  const calendarManager = new CalendarManager();
 
   for (const patient of patients) {
     await delay(50); // Simulate processing time
 
     try {
-      const result = processPatient(patient, referenceDate);
+      const result = processPatient(patient, referenceDate, calendarManager);
       results.push(result);
     } catch (error) {
       console.error(`Error processing patient ${patient.ID}:`, error);
@@ -26,10 +32,14 @@ export const processPatients = async (patients: PatientData[]): Promise<Processe
     }
   }
 
-  return results;
+  return { results, calendarManager };
 };
 
-const processPatient = (patient: PatientData, referenceDate: Date): ProcessedResult => {
+const processPatient = (
+  patient: PatientData,
+  referenceDate: Date,
+  calendarManager: CalendarManager
+): ProcessedResult => {
   const carteirinha = patient["CARTEIRINHA (tem na guia que sai do sistema - não inserir CPF)"];
   const nome = patient["Nome completo da paciente"];
   const maternidade = patient["Maternidade que a paciente deseja"];
@@ -116,8 +126,21 @@ const processPatient = (patient: PatientData, referenceDate: Date): ProcessedRes
   const dataFim = new Date(dataIdeal);
   dataFim.setDate(dataFim.getDate() + 7);
 
+  // Extract phone number
+  const telefone = patient["Informe dois telefones de contato com o paciente para que ele seja contato pelo hospital"];
+  
   // Try to allocate a slot
-  const agendamento = tryAllocateSlot(maternidade, dataInicio, dataFim);
+  const agendamento = calendarManager.tryAllocateSlot(
+    maternidade,
+    dataInicio,
+    dataFim,
+    {
+      id: patient.ID,
+      name: nome,
+      carteirinha,
+      phone: telefone,
+    }
+  );
 
   return {
     id: patient.ID,
@@ -337,52 +360,6 @@ const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date =
   }
 
   return result;
-};
-
-interface AllocationResult {
-  success: boolean;
-  date?: Date;
-  observations: string[];
-}
-
-const tryAllocateSlot = (
-  maternidade: string,
-  startDate: Date,
-  endDate: Date
-): AllocationResult => {
-  // Simplified allocation - in real implementation, this would check actual calendar
-  const observations: string[] = [];
-  
-  let currentDate = new Date(startDate);
-  
-  while (currentDate <= endDate) {
-    // Skip Sundays
-    if (currentDate.getDay() === 0) {
-      currentDate.setDate(currentDate.getDate() + 1);
-      continue;
-    }
-
-    // Simulate slot availability (60% chance for demonstration)
-    if (Math.random() > 0.4) {
-      observations.push(`Agendada em ${formatDate(currentDate)}`);
-      observations.push(`Maternidade: ${maternidade}`);
-      return {
-        success: true,
-        date: new Date(currentDate),
-        observations,
-      };
-    }
-
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-
-  observations.push("Nenhuma vaga disponível na janela de agendamento");
-  observations.push(`Período buscado: ${formatDate(startDate)} a ${formatDate(endDate)}`);
-  
-  return {
-    success: false,
-    observations,
-  };
 };
 
 const parseDate = (dateStr: string): Date | null => {
