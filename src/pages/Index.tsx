@@ -9,7 +9,8 @@ import ProcessingResults from "@/components/ProcessingResults";
 import SimplifiedPatientTable from "@/components/SimplifiedPatientTable";
 import { PatientData, ProcessedResult } from "@/types/patient";
 import { SimplifiedPatientData } from "@/types/simplifiedPatient";
-import { processPatients } from "@/utils/patientProcessor";
+import { processPatients, CalendarManager } from "@/utils/patientProcessor";
+import { exportMaternityCalendars } from "@/utils/excelExporter";
 import { toast } from "sonner";
 
 const Index = () => {
@@ -19,6 +20,7 @@ const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
   const [dataMode, setDataMode] = useState<"detailed" | "simplified" | null>(null);
+  const [calendarManager, setCalendarManager] = useState<CalendarManager | null>(null);
 
   const handleFileUpload = (data: PatientData[]) => {
     setPatients(data);
@@ -38,8 +40,9 @@ const Index = () => {
     setIsProcessing(true);
     try {
       // Process patients according to the protocols
-      const results = await processPatients(patients);
+      const { results, calendarManager: manager } = await processPatients(patients);
       setProcessedResults(results);
+      setCalendarManager(manager);
       setActiveTab("results");
       
       const scheduled = results.filter(r => r.status === "AGENDADA").length;
@@ -54,6 +57,21 @@ const Index = () => {
       console.error(error);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleExportCalendars = () => {
+    if (!calendarManager) {
+      toast.error("Nenhum calendário disponível para exportar");
+      return;
+    }
+
+    try {
+      exportMaternityCalendars(calendarManager);
+      toast.success("Calendários exportados com sucesso!");
+    } catch (error) {
+      console.error("Error exporting calendars:", error);
+      toast.error("Erro ao exportar calendários");
     }
   };
 
@@ -80,7 +98,7 @@ const Index = () => {
               <Upload className="h-4 w-4" />
               Upload TSV
             </TabsTrigger>
-            <TabsTrigger value="review" disabled={patients.length === 0} className="flex items-center gap-2">
+            <TabsTrigger value="review" disabled={patients.length === 0 && simplifiedPatients.length === 0} className="flex items-center gap-2">
               <FileSpreadsheet className="h-4 w-4" />
               Revisar Dados
             </TabsTrigger>
@@ -167,6 +185,14 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="results" className="space-y-6">
+            {processedResults.length > 0 && (
+              <div className="mb-6 flex justify-end">
+                <Button onClick={handleExportCalendars} disabled={!calendarManager}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Exportar Calendários XLSX
+                </Button>
+              </div>
+            )}
             <ProcessingResults results={processedResults} patients={patients} />
           </TabsContent>
         </Tabs>
