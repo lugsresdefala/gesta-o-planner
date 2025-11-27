@@ -40,20 +40,32 @@ export const processPatients = async (
 const normalizeMaternityName = (raw: string): string | null => {
   if (!raw) return null;
   
-  const normalized = raw.toLowerCase().trim();
+  const normalized = raw.toLowerCase().trim().replace(/\s+/g, ' '); // Normaliza espaços
   
   // Map common variations to system names
   if (normalized.includes('guarulhos')) return 'Guarulhos';
-  if (normalized.includes('notrecare') || normalized.includes('notre')) return 'NotreCare';
+  if (normalized.includes('notrecare') || 
+      normalized.includes('notre care') || 
+      normalized.includes('notre')) return 'NotreCare';
   if (normalized.includes('salvalus')) return 'Salvalus';
-  if (normalized.includes('cruzeiro')) return 'Cruzeiro';
+  if (normalized.includes('cruzeiro') || 
+      normalized.includes('do carmo')) return 'Cruzeiro';
   
-  // Handle "ndn" (nada a declarar - no preference)
-  if (normalized === 'ndn' || normalized === '--' || normalized === 'nada') {
+  // Handle "no preference" variations
+  if (normalized === 'ndn' || 
+      normalized === '--' || 
+      normalized === 'nada' ||
+      normalized === 'sem preferencia' ||
+      normalized === 'sem preferência' ||
+      normalized === 'qualquer' ||
+      normalized === 'tanto faz') {
     return null; // Will allocate to any available maternity
   }
   
-  return null;
+  // Preservar valor original para análise/debug
+  // Isso permite identificar erros de digitação nos logs
+  console.warn(`Maternidade não reconhecida: "${raw}". Usando valor original.`);
+  return raw.trim(); // Retorna o valor original limpo
 };
 
 const processPatient = (
@@ -214,6 +226,9 @@ interface GAResult {
   method: "DUM" | "USG" | "AMBOS";
 }
 
+// Máximo de dias para idade gestacional (42 semanas × 7 dias)
+const MAX_IG_DAYS = 294;
+
 const calculateGestationalAge = (
   referenceDate: Date,
   dumStatus: string,
@@ -235,6 +250,12 @@ const calculateGestationalAge = (
     const usgDate = parseDate(usgData);
     if (!usgDate) return null;
 
+    // Rejeitar USG no futuro
+    if (usgDate.getTime() > referenceDate.getTime()) {
+      console.warn(`Data do USG é futura: ${usgData}`);
+      return null;
+    }
+
     const usgWeeksNum = parseFloat(usgWeeks);
     const usgDaysNum = usgDays ? parseInt(usgDays) : 0;
     const usgTotalDays = Math.floor(usgWeeksNum * 7) + usgDaysNum;
@@ -243,6 +264,18 @@ const calculateGestationalAge = (
       (referenceDate.getTime() - usgDate.getTime()) / (1000 * 60 * 60 * 24)
     );
     const currentTotalDays = usgTotalDays + daysSinceUSG;
+
+    // Rejeitar IG > 42 semanas (294 dias)
+    if (currentTotalDays > MAX_IG_DAYS) {
+      console.warn(`IG calculada excede 42 semanas: ${currentTotalDays} dias (${Math.floor(currentTotalDays/7)} semanas)`);
+      return null;
+    }
+
+    // Rejeitar IG negativa
+    if (currentTotalDays < 0) {
+      console.warn(`IG calculada é negativa: ${currentTotalDays} dias`);
+      return null;
+    }
 
     return {
       age: {
@@ -261,10 +294,29 @@ const calculateGestationalAge = (
     
     if (!dumDate || !usgDate) return null;
 
+    // Rejeitar DUM no futuro
+    if (dumDate.getTime() > referenceDate.getTime()) {
+      console.warn(`DUM é data futura: ${dumData}`);
+      return null;
+    }
+
+    // Rejeitar USG no futuro
+    if (usgDate.getTime() > referenceDate.getTime()) {
+      console.warn(`Data do USG é futura: ${usgData}`);
+      return null;
+    }
+
     // Calculate GA by DUM at USG date
     const daysSinceDUM = Math.floor(
       (usgDate.getTime() - dumDate.getTime()) / (1000 * 60 * 60 * 24)
     );
+
+    // Rejeitar DUM posterior ao USG
+    if (daysSinceDUM < 0) {
+      console.warn(`DUM (${dumData}) é posterior ao USG (${usgData})`);
+      return null;
+    }
+
     const gaByDUMAtUSG = {
       totalDays: daysSinceDUM,
       weeks: Math.floor(daysSinceDUM / 7),
@@ -290,6 +342,18 @@ const calculateGestationalAge = (
     );
     const currentTotalDays = chosenGA + daysSinceChosen;
 
+    // Rejeitar IG > 42 semanas
+    if (currentTotalDays > MAX_IG_DAYS) {
+      console.warn(`IG calculada excede 42 semanas: ${currentTotalDays} dias`);
+      return null;
+    }
+
+    // Rejeitar IG negativa
+    if (currentTotalDays < 0) {
+      console.warn(`IG calculada é negativa: ${currentTotalDays} dias`);
+      return null;
+    }
+
     return {
       age: {
         totalDays: currentTotalDays,
@@ -305,9 +369,27 @@ const calculateGestationalAge = (
     const dumDate = parseDate(dumData);
     if (!dumDate) return null;
 
+    // Rejeitar DUM no futuro
+    if (dumDate.getTime() > referenceDate.getTime()) {
+      console.warn(`DUM é data futura: ${dumData}`);
+      return null;
+    }
+
     const daysSinceDUM = Math.floor(
       (referenceDate.getTime() - dumDate.getTime()) / (1000 * 60 * 60 * 24)
     );
+
+    // Rejeitar IG > 42 semanas
+    if (daysSinceDUM > MAX_IG_DAYS) {
+      console.warn(`IG pela DUM excede 42 semanas: ${daysSinceDUM} dias (${Math.floor(daysSinceDUM/7)} semanas)`);
+      return null;
+    }
+
+    // Rejeitar IG negativa
+    if (daysSinceDUM < 0) {
+      console.warn(`IG pela DUM é negativa: ${daysSinceDUM} dias`);
+      return null;
+    }
 
     return {
       age: {
