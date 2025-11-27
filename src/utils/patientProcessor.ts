@@ -417,20 +417,46 @@ const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date =
 const parseDate = (dateStr: string): Date | null => {
   if (!dateStr) return null;
   
+  const isValidDate = (date: Date, month: number, day: number): boolean => {
+    return !isNaN(date.getTime()) && date.getMonth() === month && date.getDate() === day;
+  };
+  
   try {
-    // Handle MM/DD/YYYY format
-    const parts = dateStr.split("/");
-    if (parts.length === 3) {
-      const month = parseInt(parts[0]) - 1; // Month is 0-indexed
-      const day = parseInt(parts[1]);
-      const year = parseInt(parts[2]);
-      return new Date(year, month, day);
+    const parts = dateStr.trim().split("/");
+    if (parts.length !== 3) return null;
+
+    const [part1, part2, part3] = parts.map(p => parseInt(p, 10));
+    
+    // Detect format based on numeric values
+    // If part1 > 12, it's DD/MM/YYYY (Brazilian format)
+    if (part1 > 12) {
+      const day = part1;
+      const month = part2 - 1; // 0-indexed
+      const year = part3;
+      const date = new Date(year, month, day);
+      return isValidDate(date, month, day) ? date : null;
     }
+    
+    // If part2 > 12, it's MM/DD/YYYY (American format)
+    if (part2 > 12) {
+      const month = part1 - 1; // 0-indexed
+      const day = part2;
+      const year = part3;
+      const date = new Date(year, month, day);
+      return isValidDate(date, month, day) ? date : null;
+    }
+    
+    // Ambiguous case (e.g., 05/03/2025) - assume DD/MM/YYYY (Brazilian standard)
+    const day = part1;
+    const month = part2 - 1;
+    const year = part3;
+    const date = new Date(year, month, day);
+    return isValidDate(date, month, day) ? date : null;
+    
   } catch (error) {
     console.error("Error parsing date:", dateStr, error);
+    return null;
   }
-  
-  return null;
 };
 
 const formatGA = (ga: GestationalAge): string => {
