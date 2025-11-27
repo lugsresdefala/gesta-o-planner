@@ -116,66 +116,85 @@ const createCalendarWorksheet = (
   slots: Map<string, MaternitySlot[]>
 ) => {
   const data: any[][] = [];
-
-  // Header
-  data.push([
-    `CALENDÁRIO DE AGENDAMENTOS - ${maternityName.toUpperCase()}`,
-  ]);
-  data.push([]);
-
+  
+  // Month header (get from first date)
+  const firstDateKey = Array.from(slots.keys()).sort()[0];
+  const firstSlots = slots.get(firstDateKey);
+  const monthName = firstSlots?.[0]?.date.toLocaleDateString("pt-BR", { month: "long" }) || "";
+  
+  data.push([monthName]);
+  data.push(["DIA", "DATA", "CARTEIRINHA", "NOME", "DATA DE NASCIMENTO", "DIAGNÓSTICO", "VIA DE PARTO", "TELEFONE", ""]);
+  
   // Get all dates sorted
   const dates = Array.from(slots.keys()).sort();
+  const dayNames = ["DOMINGO", "SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SABADO"];
 
   dates.forEach((dateKey) => {
     const daySlots = slots.get(dateKey) || [];
     if (daySlots.length === 0) return;
 
     const date = daySlots[0].date;
-    const dayOfWeek = daySlots[0].dayOfWeek;
-    const formattedDate = date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+    const dayOfWeek = dayNames[date.getDay()];
+    const dayNumber = date.getDate();
 
-    // Day header
-    data.push([`${dayOfWeek}, ${formattedDate}`, "", "", "", ""]);
-
-    // Column headers for slots
-    data.push(["Vaga", "Carteirinha", "Nome", "Telefone", "Status"]);
-
-    // Slots
-    daySlots.forEach((slot) => {
+    // Count occupied slots
+    const occupiedSlots = daySlots.filter(slot => slot.occupied);
+    
+    if (occupiedSlots.length === 0) {
+      // Empty day - just show day header with empty row
+      data.push([dayOfWeek, dayNumber, "", "", "", "", "", "", ""]);
+    } else {
+      // First occupied slot includes day header
+      const firstSlot = occupiedSlots[0];
       data.push([
-        `${slot.slotNumber}`,
-        slot.carteirinha || "",
-        slot.patientName || "",
-        slot.phone || "",
-        slot.occupied ? "OCUPADA" : "DISPONÍVEL",
+        dayOfWeek,
+        dayNumber,
+        firstSlot.carteirinha || "",
+        firstSlot.patientName || "",
+        "", // Data de nascimento - não temos
+        "", // Diagnóstico - não temos
+        "", // Via de parto - não temos
+        firstSlot.phone || "",
+        ""
       ]);
-    });
-
-    data.push([]); // Empty row between days
+      
+      // Remaining occupied slots
+      for (let i = 1; i < occupiedSlots.length; i++) {
+        const slot = occupiedSlots[i];
+        data.push([
+          "",
+          "",
+          slot.carteirinha || "",
+          slot.patientName || "",
+          "",
+          "",
+          "",
+          slot.phone || "",
+          ""
+        ]);
+      }
+    }
   });
 
   // Create worksheet
   const ws = XLSX.utils.aoa_to_sheet(data);
 
-  // Set column widths
+  // Set column widths to match template
   ws["!cols"] = [
-    { wch: 8 },  // Vaga
-    { wch: 20 }, // Carteirinha
-    { wch: 40 }, // Nome
-    { wch: 20 }, // Telefone
-    { wch: 12 }, // Status
+    { wch: 10 },  // DIA
+    { wch: 6 },   // DATA
+    { wch: 18 },  // CARTEIRINHA
+    { wch: 35 },  // NOME
+    { wch: 18 },  // DATA DE NASCIMENTO
+    { wch: 60 },  // DIAGNÓSTICO
+    { wch: 20 },  // VIA DE PARTO
+    { wch: 25 },  // TELEFONE
+    { wch: 5 },   // Extra column
   ];
 
-  // Style the header (row 1)
-  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-  
-  // Merge header cells
+  // Merge month header cells
   if (!ws["!merges"]) ws["!merges"] = [];
-  ws["!merges"].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } });
+  ws["!merges"].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
 
   return ws;
 };

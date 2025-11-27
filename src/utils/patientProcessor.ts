@@ -122,8 +122,10 @@ const processPatient = (
   const dataMinima = calculateMinimumDate(referenceDate, 10);
 
   // Calculate scheduling window
+  // Start date must be at least the minimum booking date
   const dataInicio = dataIdeal > dataMinima ? dataIdeal : dataMinima;
-  const dataFim = new Date(dataIdeal);
+  // End date is 7 days after the START date (not ideal date) to ensure valid window
+  const dataFim = new Date(dataInicio);
   dataFim.setDate(dataFim.getDate() + 7);
 
   // Extract phone number
