@@ -6,20 +6,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FileUpload from "@/components/FileUpload";
 import PatientDataTable from "@/components/PatientDataTable";
 import ProcessingResults from "@/components/ProcessingResults";
+import SimplifiedPatientTable from "@/components/SimplifiedPatientTable";
 import { PatientData, ProcessedResult } from "@/types/patient";
+import { SimplifiedPatientData } from "@/types/simplifiedPatient";
 import { processPatients } from "@/utils/patientProcessor";
 import { toast } from "sonner";
 
 const Index = () => {
   const [patients, setPatients] = useState<PatientData[]>([]);
+  const [simplifiedPatients, setSimplifiedPatients] = useState<SimplifiedPatientData[]>([]);
   const [processedResults, setProcessedResults] = useState<ProcessedResult[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
+  const [dataMode, setDataMode] = useState<"detailed" | "simplified" | null>(null);
 
   const handleFileUpload = (data: PatientData[]) => {
     setPatients(data);
+    setSimplifiedPatients([]);
+    setDataMode("detailed");
     setActiveTab("review");
-    toast.success(`${data.length} pacientes carregados com sucesso`);
+  };
+
+  const handleSimplifiedUpload = (data: SimplifiedPatientData[]) => {
+    setSimplifiedPatients(data);
+    setPatients([]);
+    setDataMode("simplified");
+    setActiveTab("review");
   };
 
   const handleProcess = async () => {
@@ -87,7 +99,10 @@ const Index = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <FileUpload onUpload={handleFileUpload} />
+                <FileUpload 
+                  onUpload={handleFileUpload}
+                  onSimplifiedUpload={handleSimplifiedUpload}
+                />
               </CardContent>
             </Card>
 
@@ -125,19 +140,28 @@ const Index = () => {
               <CardHeader>
                 <CardTitle>Dados Carregados</CardTitle>
                 <CardDescription>
-                  {patients.length} pacientes prontos para processamento
+                  {dataMode === "simplified" 
+                    ? `${simplifiedPatients.length} pacientes (formato simplificado - visualização)`
+                    : `${patients.length} pacientes prontos para processamento`
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <PatientDataTable patients={patients} />
-                <div className="mt-6 flex justify-end gap-4">
-                  <Button variant="outline" onClick={() => setActiveTab("upload")}>
-                    Voltar
-                  </Button>
-                  <Button onClick={handleProcess} disabled={isProcessing}>
-                    {isProcessing ? "Processando..." : "Processar Agendamentos"}
-                  </Button>
-                </div>
+                {dataMode === "simplified" ? (
+                  <SimplifiedPatientTable patients={simplifiedPatients} />
+                ) : (
+                  <>
+                    <PatientDataTable patients={patients} />
+                    <div className="mt-6 flex justify-end gap-4">
+                      <Button variant="outline" onClick={() => setActiveTab("upload")}>
+                        Voltar
+                      </Button>
+                      <Button onClick={handleProcess} disabled={isProcessing}>
+                        {isProcessing ? "Processando..." : "Processar Agendamentos"}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
