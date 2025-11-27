@@ -35,6 +35,26 @@ export const processPatients = async (
   return { results, calendarManager };
 };
 
+// Normalize maternity names from TSV to system names
+const normalizeMaternityName = (raw: string): string | null => {
+  if (!raw) return null;
+  
+  const normalized = raw.toLowerCase().trim();
+  
+  // Map common variations to system names
+  if (normalized.includes('guarulhos')) return 'Guarulhos';
+  if (normalized.includes('notrecare') || normalized.includes('notre')) return 'NotreCare';
+  if (normalized.includes('salvalus')) return 'Salvalus';
+  if (normalized.includes('cruzeiro')) return 'Cruzeiro';
+  
+  // Handle "ndn" (nada a declarar - no preference)
+  if (normalized === 'ndn' || normalized === '--' || normalized === 'nada') {
+    return null; // Will allocate to any available maternity
+  }
+  
+  return null;
+};
+
 const processPatient = (
   patient: PatientData,
   referenceDate: Date,
@@ -42,7 +62,8 @@ const processPatient = (
 ): ProcessedResult => {
   const carteirinha = patient["CARTEIRINHA (tem na guia que sai do sistema - não inserir CPF)"];
   const nome = patient["Nome completo da paciente"];
-  const maternidade = patient["Maternidade que a paciente deseja"];
+  const maternidadeRaw = patient["Maternidade que a paciente deseja"];
+  const maternidade = normalizeMaternityName(maternidadeRaw);
   
   // Check if already scheduled
   const igPretendida = patient["Informe IG pretendida para o procedimento \n* Não confirmar essa data para a paciente, dependendo da agenda hospitalar poderemos ter uma variação\n* Para laqueaduras favor colocar data que completa 60 d"];
@@ -128,40 +149,54 @@ const processPatient = (
   const dataFim = new Date(dataInicio);
   dataFim.setDate(dataFim.getDate() + 7);
 
-  console.log(`[DEBUG] Paciente ${patient.ID}:`, {
-    nome,
-    maternidade,
-    igAtual: formatGA(igResult.age),
-    igRecomendada: formatGA(igRecomendada),
-    dataMinima: dataMinima.toLocaleDateString("pt-BR"),
-    dataIdeal: dataIdeal.toLocaleDateString("pt-BR"),
-    dataInicio: dataInicio.toLocaleDateString("pt-BR"),
-    dataFim: dataFim.toLocaleDateString("pt-BR"),
-  });
-
   // Extract phone number
   const telefone = patient["Informe dois telefones de contato com o paciente para que ele seja contato pelo hospital"];
   
   // Try to allocate a slot
-  const agendamento = calendarManager.tryAllocateSlot(
-    maternidade,
-    dataInicio,
-    dataFim,
-    {
-      id: patient.ID,
-      name: nome,
-      carteirinha,
-      phone: telefone,
-    }
-  );
+  let agendamento;
   
-  console.log(`[DEBUG] Resultado agendamento:`, agendamento);
+  if (maternidade) {
+    // Patient has a specific maternity preference
+    agendamento = calendarManager.tryAllocateSlot(
+      maternidade,
+      dataInicio,
+      dataFim,
+      {
+        id: patient.ID,
+        name: nome,
+        carteirinha,
+        phone: telefone,
+      }
+    );
+  } else {
+    // Patient has no preference - try all maternities
+    const maternities = ['Guarulhos', 'NotreCare', 'Salvalus', 'Cruzeiro'];
+    
+    for (const mat of maternities) {
+      agendamento = calendarManager.tryAllocateSlot(
+        mat,
+        dataInicio,
+        dataFim,
+        {
+          id: patient.ID,
+          name: nome,
+          carteirinha,
+          phone: telefone,
+        }
+      );
+      
+      if (agendamento.success) {
+        break; // Found a slot!
+      }
+    }
+  }
 
   return {
     id: patient.ID,
     nome,
     carteirinha,
-    maternidade_desejada: maternidade,
+    maternidade_desejada: maternidadeRaw || "Sem preferência",
+    maternidade_alocada: agendamento.maternity,
     status: agendamento.success ? "AGENDADA" : "NÃO_AGENDADA",
     ig_atual: formatGA(igResult.age),
     metodo_ig: igResult.method,

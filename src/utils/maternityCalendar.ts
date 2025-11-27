@@ -85,21 +85,12 @@ export class CalendarManager {
       carteirinha: string;
       phone?: string;
     }
-  ): { success: boolean; date?: Date; observations: string[] } {
+  ): { success: boolean; date?: Date; maternity?: string; observations: string[] } {
     const observations: string[] = [];
-    
-    console.log(`[DEBUG] tryAllocateSlot chamado:`, {
-      maternity,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      maternidadesDisponiveis: Array.from(this.calendars.keys()),
-    });
-    
     const calendar = this.calendars.get(maternity);
 
     if (!calendar) {
       observations.push(`Maternidade ${maternity} não encontrada`);
-      console.log(`[DEBUG] Maternidade não encontrada:`, maternity);
       return { success: false, observations };
     }
 
@@ -133,6 +124,7 @@ export class CalendarManager {
         return {
           success: true,
           date: new Date(currentDate),
+          maternity,
           observations,
         };
       }

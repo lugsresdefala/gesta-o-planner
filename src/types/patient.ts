@@ -39,6 +39,7 @@ export interface ProcessedResult {
   nome: string;
   carteirinha: string;
   maternidade_desejada: string;
+  maternidade_alocada?: string; // Maternity where patient was actually scheduled
   status: "AGENDADA" | "JÁ_AGENDADA" | "NÃO_AGENDADA" | "ERRO";
   ig_atual?: string;
   metodo_ig?: "DUM" | "USG" | "AMBOS";
