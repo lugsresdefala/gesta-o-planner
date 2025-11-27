@@ -42,23 +42,34 @@ const normalizeMaternityName = (raw: string): string | null => {
   
   const normalized = raw.toLowerCase().trim().replace(/\s+/g, ' '); // Normaliza espaços
   
-  // Map common variations to system names
-  if (normalized.includes('guarulhos')) return 'Guarulhos';
+  // Map common variations to system names (always return PascalCase used by CalendarManager)
+  if (normalized.includes('guarulhos') || 
+      normalized.includes('guaru')) return 'Guarulhos';
   if (normalized.includes('notrecare') || 
       normalized.includes('notre care') || 
+      normalized.includes('notre-care') ||
       normalized.includes('notre')) return 'NotreCare';
-  if (normalized.includes('salvalus')) return 'Salvalus';
+  if (normalized.includes('salvalus') ||
+      normalized.includes('salva lus')) return 'Salvalus';
   if (normalized.includes('cruzeiro') || 
-      normalized.includes('do carmo')) return 'Cruzeiro';
+      normalized.includes('do carmo') ||
+      normalized.includes('ns do carmo') ||
+      normalized.includes('nossa senhora')) return 'Cruzeiro';
   
   // Handle "no preference" variations
   if (normalized === 'ndn' || 
       normalized === '--' || 
+      normalized === '-' ||
+      normalized === '' ||
       normalized === 'nada' ||
+      normalized === 'n/a' ||
+      normalized === 'na' ||
       normalized === 'sem preferencia' ||
       normalized === 'sem preferência' ||
       normalized === 'qualquer' ||
-      normalized === 'tanto faz') {
+      normalized === 'qualquer uma' ||
+      normalized === 'tanto faz' ||
+      normalized === 'nenhuma') {
     return null; // Will allocate to any available maternity
   }
   
@@ -138,7 +149,24 @@ const processPatient = (
   const indicacao = patient["Informe a indicação do procedimento"];
   const medicacao = patient["Indique qual medicação e dosagem que a paciente utiliza."];
   
-  const igRecomendada = determineRecommendedGA(diagnosticos, indicacao, medicacao);
+  // Validate diagnosticos field
+  const diagnosticosWarnings: string[] = [];
+  const diagnosticosNormalized = (diagnosticos || '').toLowerCase().trim();
+  if (!diagnosticos || 
+      diagnosticosNormalized === '' || 
+      diagnosticosNormalized === 'ndn' || 
+      diagnosticosNormalized === '--' ||
+      diagnosticosNormalized === '-' ||
+      diagnosticosNormalized === 'n/a' ||
+      diagnosticosNormalized === 'na' ||
+      diagnosticosNormalized === 'nenhum' ||
+      diagnosticosNormalized === 'nada') {
+    diagnosticosWarnings.push("⚠️ Campo de diagnósticos vazio ou não informado - usando IG padrão de 39 semanas");
+  }
+  
+  const igRecomendadaResult = determineRecommendedGA(diagnosticos, indicacao, medicacao);
+  const igRecomendada = igRecomendadaResult.ga;
+  const diagnosticoDetectado = igRecomendadaResult.diagnosis;
 
   // Calculate ideal delivery date
   const daysRemaining = igRecomendada.totalDays - igResult.age.totalDays;
@@ -204,6 +232,15 @@ const processPatient = (
     }
   }
 
+  // Build observations with diagnostic info
+  const observacoesFinais: string[] = [
+    ...diagnosticosWarnings,
+    `📋 Diagnóstico detectado: ${diagnosticoDetectado}`,
+    `📊 Método IG: ${igResult.method}`,
+    `🎯 IG recomendada: ${formatGA(igRecomendada)} (${igRecomendada.weeks} semanas)`,
+    ...agendamento.observations,
+  ];
+
   return {
     id: patient.ID,
     nome,
@@ -217,7 +254,7 @@ const processPatient = (
     ig_recomendada: formatGA(igRecomendada),
     data_ideal: dataIdeal,
     data_agendamento: agendamento.date,
-    observacoes: agendamento.observations,
+    observacoes: observacoesFinais,
   };
 };
 
@@ -415,24 +452,34 @@ const getTolerance = (gaInDays: number): number => {
   return 21; // > 19 weeks
 };
 
+interface RecommendedGAResult {
+  ga: GestationalAge;
+  diagnosis: string;
+}
+
 const determineRecommendedGA = (
   diagnosticos: string,
   indicacao: string,
   medicacao: string
-): GestationalAge => {
-  const searchText = `${diagnosticos} ${indicacao} ${medicacao}`.toLowerCase();
+): RecommendedGAResult => {
+  const searchText = `${diagnosticos || ''} ${indicacao || ''} ${medicacao || ''}`.toLowerCase();
 
-  // Priority checks
+  // Priority checks - Cerclagem / IIC (15 weeks)
   if (
     searchText.includes("cerclagem") ||
     searchText.includes("iic") ||
     searchText.includes("incompetencia") ||
     searchText.includes("incompetência") ||
-    searchText.includes("istmo")
+    searchText.includes("istmo") ||
+    searchText.includes("istmocervical")
   ) {
-    return { totalDays: 105, weeks: 15, days: 0 }; // 15 weeks
+    return { 
+      ga: { totalDays: 105, weeks: 15, days: 0 },
+      diagnosis: "Cerclagem/IIC" 
+    }; // 15 weeks
   }
 
+  // Hypertensive disorders (37 weeks)
   if (
     searchText.includes("hipertens") ||
     searchText.includes("hipertensao") ||
@@ -440,24 +487,92 @@ const determineRecommendedGA = (
     searchText.includes("pre-eclampsia") ||
     searchText.includes("pré-eclampsia") ||
     searchText.includes("preeclampsia") ||
+    searchText.includes("pre eclampsia") ||
+    searchText.includes("pré eclampsia") ||
     searchText.includes("eclampsia") ||
     searchText.includes("hac") ||
     searchText.includes("has") ||
     searchText.includes("hag") ||
     searchText.includes("dheg")
   ) {
-    return { totalDays: 259, weeks: 37, days: 0 }; // 37 weeks
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Hipertensão/Pré-eclâmpsia" 
+    }; // 37 weeks
   }
 
-  if (searchText.includes("dmg") && searchText.includes("insulina")) {
-    return { totalDays: 266, weeks: 38, days: 0 }; // 38 weeks
+  // DMG with insulin (38 weeks) - must have "insulina" but NOT "sem insulina"
+  if ((searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") || 
+       searchText.includes("diabetes gestacional")) && 
+      searchText.includes("insulina") && 
+      !searchText.includes("sem insulina") &&
+      !searchText.includes("s/ insulina")) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "DMG com insulina" 
+    }; // 38 weeks
   }
 
-  if (searchText.includes("dmg")) {
-    return { totalDays: 280, weeks: 40, days: 0 }; // 40 weeks
+  // Also check for "com insulina" explicitly
+  if ((searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") || 
+       searchText.includes("diabetes gestacional")) && 
+      searchText.includes("com insulina")) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "DMG com insulina" 
+    }; // 38 weeks
   }
 
-  // Elective indications
+  // DMG without insulin (40 weeks)
+  if (searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") ||
+      searchText.includes("diabetes gestacional")) {
+    return { 
+      ga: { totalDays: 280, weeks: 40, days: 0 },
+      diagnosis: "DMG sem insulina" 
+    }; // 40 weeks
+  }
+
+  // RCF - Restrição de Crescimento Fetal (37 weeks)
+  if (
+    searchText.includes("rcf") ||
+    searchText.includes("rciu") ||
+    searchText.includes("restricao de crescimento") ||
+    searchText.includes("restrição de crescimento") ||
+    searchText.includes("crescimento restrito")
+  ) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "RCF/RCIU" 
+    }; // 37 weeks
+  }
+
+  // Oligoâmnio (37 weeks)
+  if (
+    searchText.includes("oligoamnio") ||
+    searchText.includes("oligoâmnio") ||
+    searchText.includes("oligoidramnio") ||
+    searchText.includes("oligoidrâmnio")
+  ) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Oligoâmnio" 
+    }; // 37 weeks
+  }
+
+  // Polidrâmnio (38 weeks)
+  if (
+    searchText.includes("polidramnio") ||
+    searchText.includes("polidrâmnio") ||
+    searchText.includes("polihidramnio") ||
+    searchText.includes("polihidrâmnio")
+  ) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Polidrâmnio" 
+    }; // 38 weeks
+  }
+
+  // Elective indications (39 weeks)
   if (
     searchText.includes("laqueadura") ||
     searchText.includes("laqueação") ||
@@ -467,17 +582,25 @@ const determineRecommendedGA = (
     searchText.includes("pélvic") ||
     searchText.includes("iterativ") ||
     searchText.includes("cesarea anterior") ||
+    searchText.includes("cesarea anterior") ||
+    searchText.includes("cesárea anterior") ||
     searchText.includes("gig") ||
     searchText.includes("macrossomia") ||
     searchText.includes("transvers") ||
     searchText.includes("cormic") ||
     searchText.includes("córmic")
   ) {
-    return { totalDays: 273, weeks: 39, days: 0 }; // 39 weeks
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Indicação eletiva" 
+    }; // 39 weeks
   }
 
   // Default
-  return { totalDays: 273, weeks: 39, days: 0 }; // 39 weeks
+  return { 
+    ga: { totalDays: 273, weeks: 39, days: 0 },
+    diagnosis: "Padrão (sem diagnóstico específico)" 
+  }; // 39 weeks
 };
 
 const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date => {

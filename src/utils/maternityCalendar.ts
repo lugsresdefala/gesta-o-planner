@@ -42,6 +42,33 @@ export class CalendarManager {
     });
   }
 
+  /**
+   * Find a calendar by maternity name, with case-insensitive fallback
+   */
+  private findCalendar(maternity: string): MaternityCalendar | undefined {
+    // Busca exata primeiro
+    if (this.calendars.has(maternity)) {
+      return this.calendars.get(maternity);
+    }
+    
+    // Busca case-insensitive
+    const normalized = maternity.toLowerCase().trim();
+    for (const [key, value] of this.calendars.entries()) {
+      if (key.toLowerCase() === normalized) {
+        return value;
+      }
+    }
+    
+    return undefined;
+  }
+
+  /**
+   * Get list of available maternity names
+   */
+  private getAvailableMaternities(): string[] {
+    return Array.from(this.calendars.keys());
+  }
+
   private getDateKey(date: Date): string {
     return date.toISOString().split("T")[0];
   }
@@ -52,7 +79,7 @@ export class CalendarManager {
   }
 
   private ensureSlotsForDate(maternity: string, date: Date) {
-    const calendar = this.calendars.get(maternity);
+    const calendar = this.findCalendar(maternity);
     if (!calendar) return;
 
     const dateKey = this.getDateKey(date);
@@ -87,14 +114,15 @@ export class CalendarManager {
     }
   ): { success: boolean; date?: Date; maternity?: string; observations: string[] } {
     const observations: string[] = [];
-    const calendar = this.calendars.get(maternity);
+    const calendar = this.findCalendar(maternity);
 
     if (!calendar) {
-      observations.push(`Maternidade ${maternity} não encontrada`);
+      const available = this.getAvailableMaternities().join(", ");
+      observations.push(`Maternidade "${maternity}" não encontrada. Disponíveis: ${available}`);
       return { success: false, observations };
     }
 
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
 
     while (currentDate <= endDate) {
       // Skip Sundays
@@ -141,7 +169,7 @@ export class CalendarManager {
   }
 
   public getCalendar(maternity: string): MaternityCalendar | undefined {
-    return this.calendars.get(maternity);
+    return this.findCalendar(maternity);
   }
 
   public getAllCalendars(): MaternityCalendar[] {
