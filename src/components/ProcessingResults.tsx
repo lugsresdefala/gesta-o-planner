@@ -11,8 +11,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, XCircle, Clock, AlertCircle, Download } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, AlertCircle, Download, FileX } from "lucide-react";
 import { toast } from "sonner";
+import { exportUnscheduledPatients } from "@/utils/excelExporter";
 
 interface ProcessingResultsProps {
   results: ProcessedResult[];
@@ -98,6 +99,11 @@ const ProcessingResults = ({ results, patients }: ProcessingResultsProps) => {
     toast.success("CSV exportado com sucesso!");
   };
 
+  const handleExportUnscheduled = () => {
+    exportUnscheduledPatients(results);
+    toast.success("Relatório de não agendados exportado com sucesso!");
+  };
+
   const formatDate = (date?: Date) => {
     if (!date) return "-";
     return date.toLocaleDateString("pt-BR", {
@@ -160,10 +166,18 @@ const ProcessingResults = ({ results, patients }: ProcessingResultsProps) => {
                 Detalhamento dos agendamentos realizados e pendências
               </CardDescription>
             </div>
-            <Button onClick={handleExportCSV} variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
+            <div className="flex gap-2">
+              {(stats.naoAgendada + stats.erro) > 0 && (
+                <Button onClick={handleExportUnscheduled} variant="outline" size="sm">
+                  <FileX className="mr-2 h-4 w-4" />
+                  Exportar Não Agendados
+                </Button>
+              )}
+              <Button onClick={handleExportCSV} variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

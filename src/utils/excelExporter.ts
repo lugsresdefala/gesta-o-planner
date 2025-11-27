@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { CalendarManager, MaternitySlot } from "./maternityCalendar";
+import { ProcessedResult } from "@/types/patient";
 
 export const exportMaternityCalendars = (calendarManager: CalendarManager) => {
   const workbook = XLSX.utils.book_new();
@@ -10,6 +11,104 @@ export const exportMaternityCalendars = (calendarManager: CalendarManager) => {
   });
 
   XLSX.writeFile(workbook, `Agendamentos_Maternidades_${new Date().toISOString().split("T")[0]}.xlsx`);
+};
+
+export const exportUnscheduledPatients = (results: ProcessedResult[]) => {
+  const unscheduled = results.filter(
+    (r) => r.status === "NÃO_AGENDADA" || r.status === "ERRO"
+  );
+
+  const workbook = XLSX.utils.book_new();
+  const data: any[][] = [];
+
+  // Header
+  data.push(["RELATÓRIO DE PACIENTES NÃO AGENDADOS"]);
+  data.push([]);
+  data.push([`Total: ${unscheduled.length} pacientes`]);
+  data.push([`Gerado em: ${new Date().toLocaleString("pt-BR")}`]);
+  data.push([]);
+
+  // Column headers
+  data.push([
+    "ID",
+    "Nome",
+    "Carteirinha",
+    "Maternidade",
+    "Status",
+    "IG Atual",
+    "Método",
+    "IG Recomendada",
+    "Data Ideal",
+    "Motivo Principal",
+    "Detalhes",
+  ]);
+
+  // Data rows
+  unscheduled.forEach((result) => {
+    const mainReason = result.observacoes[0] || "Sem informação";
+    const details = result.observacoes.slice(1).join("; ");
+
+    data.push([
+      result.id,
+      result.nome,
+      result.carteirinha,
+      result.maternidade_desejada,
+      result.status,
+      result.ig_atual || "-",
+      result.metodo_ig || "-",
+      result.ig_recomendada || "-",
+      result.data_ideal?.toLocaleDateString("pt-BR") || "-",
+      mainReason,
+      details,
+    ]);
+  });
+
+  // Summary by reason
+  data.push([]);
+  data.push(["ANÁLISE POR MOTIVO"]);
+  data.push([]);
+
+  const reasonCount: { [key: string]: number } = {};
+  unscheduled.forEach((result) => {
+    const reason = result.observacoes[0] || "Sem informação";
+    reasonCount[reason] = (reasonCount[reason] || 0) + 1;
+  });
+
+  data.push(["Motivo", "Quantidade"]);
+  Object.entries(reasonCount)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([reason, count]) => {
+      data.push([reason, count]);
+    });
+
+  // Create worksheet
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Set column widths
+  ws["!cols"] = [
+    { wch: 8 },  // ID
+    { wch: 30 }, // Nome
+    { wch: 20 }, // Carteirinha
+    { wch: 15 }, // Maternidade
+    { wch: 15 }, // Status
+    { wch: 12 }, // IG Atual
+    { wch: 10 }, // Método
+    { wch: 12 }, // IG Recomendada
+    { wch: 12 }, // Data Ideal
+    { wch: 40 }, // Motivo Principal
+    { wch: 50 }, // Detalhes
+  ];
+
+  // Merge header cells
+  if (!ws["!merges"]) ws["!merges"] = [];
+  ws["!merges"].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 10 } });
+
+  XLSX.utils.book_append_sheet(workbook, ws, "Não Agendados");
+
+  XLSX.writeFile(
+    workbook,
+    `Pacientes_Nao_Agendados_${new Date().toISOString().split("T")[0]}.xlsx`
+  );
 };
 
 const createCalendarWorksheet = (
