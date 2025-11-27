@@ -582,7 +582,6 @@ const determineRecommendedGA = (
     searchText.includes("pélvic") ||
     searchText.includes("iterativ") ||
     searchText.includes("cesarea anterior") ||
-    searchText.includes("cesarea anterior") ||
     searchText.includes("cesárea anterior") ||
     searchText.includes("gig") ||
     searchText.includes("macrossomia") ||
