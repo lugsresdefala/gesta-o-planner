@@ -33,15 +33,17 @@ const SimplifiedPatientTable = ({ patients }: SimplifiedPatientTableProps) => {
     );
   };
 
-  const stats = {
-    total: patients.length,
-    agendado: patients.filter((p) => p.Status === "AGENDADO").length,
-    realizado: patients.filter((p) => p.Status === "REALIZADO").length,
-    byMaternity: patients.reduce((acc, p) => {
-      acc[p.Maternidade] = (acc[p.Maternidade] || 0) + 1;
+  // Calculate stats in a single pass instead of multiple iterations
+  const stats = patients.reduce(
+    (acc, p) => {
+      acc.total++;
+      if (p.Status === "AGENDADO") acc.agendado++;
+      else if (p.Status === "REALIZADO") acc.realizado++;
+      acc.byMaternity[p.Maternidade] = (acc.byMaternity[p.Maternidade] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>),
-  };
+    },
+    { total: 0, agendado: 0, realizado: 0, byMaternity: {} as Record<string, number> }
+  );
 
   return (
     <div className="space-y-4">

@@ -25,9 +25,12 @@ const MATERNITY_CAPACITY: { [key: string]: { [day: number]: number } } = {
 
 export class CalendarManager {
   private calendars: Map<string, MaternityCalendar>;
+  // Cache for O(1) case-insensitive lookups
+  private calendarLookup: Map<string, string>;
 
   constructor() {
     this.calendars = new Map();
+    this.calendarLookup = new Map();
     this.initializeCalendars();
   }
 
@@ -39,24 +42,25 @@ export class CalendarManager {
         name,
         slots: new Map(),
       });
+      // Pre-populate the case-insensitive lookup cache
+      this.calendarLookup.set(name.toLowerCase(), name);
     });
   }
 
   /**
-   * Find a calendar by maternity name, with case-insensitive fallback
+   * Find a calendar by maternity name, with case-insensitive O(1) lookup
    */
   private findCalendar(maternity: string): MaternityCalendar | undefined {
-    // Busca exata primeiro
+    // Busca exata primeiro - O(1)
     if (this.calendars.has(maternity)) {
       return this.calendars.get(maternity);
     }
     
-    // Busca case-insensitive
+    // Busca case-insensitive usando cache - O(1)
     const normalized = maternity.toLowerCase().trim();
-    for (const [key, value] of this.calendars.entries()) {
-      if (key.toLowerCase() === normalized) {
-        return value;
-      }
+    const canonicalName = this.calendarLookup.get(normalized);
+    if (canonicalName) {
+      return this.calendars.get(canonicalName);
     }
     
     return undefined;

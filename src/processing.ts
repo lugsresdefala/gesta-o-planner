@@ -16,26 +16,27 @@ export function normalizeMaternityName(maternity: string): string {
     return maternityMapping[maternity] || maternity;
 }
 
+// Pre-compiled regex patterns for efficient diagnosis matching
+const DIAGNOSIS_REGEX_MAP: Array<{ pattern: RegExp; week: number }> = [
+    { pattern: /DMG.*insulin/, week: 37 },
+    { pattern: /DMG.*sem insulin/, week: 38 },
+    { pattern: /HAC/, week: 39 },
+    { pattern: /Hipertensão gestacional/, week: 40 },
+    { pattern: /DHEG/, week: 40 },
+    { pattern: /RCF precoce/, week: 38 },  // More specific pattern first
+    { pattern: /RCF/, week: 39 },
+    { pattern: /Feto GIG/, week: 39 },
+    { pattern: /Feto PIG/, week: 38 },
+    { pattern: /Polidrâmnio/, week: 40 },
+    { pattern: /Iteratividade/, week: 39 },
+    { pattern: /Laqueadura/, week: 38 },
+    { pattern: /Desejo materno/, week: 37 }
+];
+
 // Determine recommended gestational age based on diagnosis
 export function determineRecommendedGA(diagnosis: string): number {
-    const regexMap: Record<string, number> = {
-        'DMG.*insulin': 37,
-        'DMG.*sem insulin': 38,
-        'HAC': 39,
-        'Hipertensão gestacional': 40,
-        'DHEG': 40,
-        'RCF': 39,
-        'RCF precoce': 38,
-        'Feto GIG': 39,
-        'Feto PIG': 38,
-        'Polidrâmnio': 40,
-        'Iteratividade': 39,
-        'Laqueadura': 38,
-        'Desejo materno': 37
-    };
-
-    for (const [key, week] of Object.entries(regexMap)) {
-        if (new RegExp(key).test(diagnosis)) {
+    for (const { pattern, week } of DIAGNOSIS_REGEX_MAP) {
+        if (pattern.test(diagnosis)) {
             return week;
         }
     }
