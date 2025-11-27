@@ -87,10 +87,19 @@ export class CalendarManager {
     }
   ): { success: boolean; date?: Date; observations: string[] } {
     const observations: string[] = [];
+    
+    console.log(`[DEBUG] tryAllocateSlot chamado:`, {
+      maternity,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      maternidadesDisponiveis: Array.from(this.calendars.keys()),
+    });
+    
     const calendar = this.calendars.get(maternity);
 
     if (!calendar) {
       observations.push(`Maternidade ${maternity} não encontrada`);
+      console.log(`[DEBUG] Maternidade não encontrada:`, maternity);
       return { success: false, observations };
     }
 

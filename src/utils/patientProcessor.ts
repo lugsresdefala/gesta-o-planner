@@ -128,6 +128,17 @@ const processPatient = (
   const dataFim = new Date(dataInicio);
   dataFim.setDate(dataFim.getDate() + 7);
 
+  console.log(`[DEBUG] Paciente ${patient.ID}:`, {
+    nome,
+    maternidade,
+    igAtual: formatGA(igResult.age),
+    igRecomendada: formatGA(igRecomendada),
+    dataMinima: dataMinima.toLocaleDateString("pt-BR"),
+    dataIdeal: dataIdeal.toLocaleDateString("pt-BR"),
+    dataInicio: dataInicio.toLocaleDateString("pt-BR"),
+    dataFim: dataFim.toLocaleDateString("pt-BR"),
+  });
+
   // Extract phone number
   const telefone = patient["Informe dois telefones de contato com o paciente para que ele seja contato pelo hospital"];
   
@@ -143,6 +154,8 @@ const processPatient = (
       phone: telefone,
     }
   );
+  
+  console.log(`[DEBUG] Resultado agendamento:`, agendamento);
 
   return {
     id: patient.ID,
