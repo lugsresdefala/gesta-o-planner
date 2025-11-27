@@ -1,5 +1,6 @@
 import { PatientData, ProcessedResult, GestationalAge } from "@/types/patient";
 import { CalendarManager } from "./maternityCalendar";
+import { findColumn } from "./columnMatcher";
 
 export { CalendarManager };
 
@@ -137,9 +138,26 @@ const processPatient = (
   }
 
   // Determine recommended gestational age based on diagnosis
-  const diagnosticos = patient["Indique os Diagnósticos Obstétricos Maternos ATUAIS ( ex. DMG com/sem insulina, Pre-eclampsia, Hipertensão gestacional, TPP na gestação atual, RPMO na gestação atual, hipotireoidismo gestacional, etc)"];
-  const indicacao = patient["Informe a indicação do procedimento"];
-  const medicacao = patient["Indique qual medicação e dosagem que a paciente utiliza."];
+  const diagnosticos = findColumn(patient, [
+    'diagnósticos obstétricos',
+    'diagnósticos maternos',
+    'diagnóstico',
+    'dmg',
+    'hipertensão',
+    'pre-eclampsia'
+  ]);
+
+  const indicacao = findColumn(patient, [
+    'indicação do procedimento',
+    'indicacao',
+    'procedimento'
+  ]);
+
+  const medicacao = findColumn(patient, [
+    'qual medicação',
+    'medicação e dosagem',
+    'medicacao e dosagem'
+  ]);
   
   // Validate diagnosticos field
   const diagnosticosWarnings: string[] = [];
@@ -255,8 +273,8 @@ interface GAResult {
   method: "DUM" | "USG" | "AMBOS";
 }
 
-// Máximo de dias para idade gestacional (42 semanas × 7 dias)
-const MAX_IG_DAYS = 294;
+// Máximo de dias para idade gestacional (40 semanas × 7 dias) - limite clínico para cesárea eletiva
+const MAX_IG_DAYS = 280;
 
 const calculateGestationalAge = (
   referenceDate: Date,
@@ -451,16 +469,25 @@ interface RecommendedGAResult {
 
 // Pre-compiled regex patterns for diagnosis matching - avoids re-creating patterns on each call
 const DIAGNOSIS_PATTERNS = {
-  cerclagem: /cerclagem|iic|incompetencia|incompetência|istmo|istmocervical/,
-  hypertension: /hipertens|hipertensao|hipertensão|pre-eclampsia|pré-eclampsia|preeclampsia|pre eclampsia|pré eclampsia|eclampsia|hac|has|hag|dheg/,
-  dmg: /dmg|diabetes mellitus gestacional|diabetes gestacional/,
-  insulinWith: /com insulina/,
-  insulinWithout: /sem insulina|s\/ insulina/,
-  insulin: /insulina/,
-  rcf: /rcf|rciu|restricao de crescimento|restrição de crescimento|crescimento restrito/,
-  oligoamnio: /oligoamnio|oligoâmnio|oligoidramnio|oligoidrâmnio/,
-  polidramnio: /polidramnio|polidrâmnio|polihidramnio|polihidrâmnio/,
-  elective: /laqueadura|laqueação|desejo|materno|pelvic|pélvic|iterativ|cesarea anterior|cesárea anterior|gig|macrossomia|transvers|cormic|córmic/,
+  cerclagem: /cerclagem|iic|incompetencia|incompetência|istmo|istmocervical/i,
+  
+  hypertension: /hipertens[aã]o|hipertensao|pre[-\s]?eclampsia|pré[-\s]?eclampsia|eclampsia|hac|has|hag|dheg|press[aã]o\s+alta|hipertens\s+descompensad/i,
+  
+  dmg: /dmg|diabetes\s+mellitus\s+gestacional|diabetes\s+gestacional|diabete\s+gestacional|dmg\s+a1|dmg\s+a2/i,
+  
+  insulinWith: /com\s+insulina|uso\s+de\s+insulina|em\s+uso\s+de\s+insulina|insulina\s+nph|insulina\s+regular|a2(?!\d)/i,
+  
+  insulinWithout: /sem\s+insulina|s[/\\]\s*insulina|dieta|a1(?!\d)|controlada\s+com\s+dieta/i,
+  
+  insulin: /insulina/i,
+  
+  rcf: /rcf|rciu|restri[cç][aã]o\s+de\s+crescimento|crescimento\s+restrito|feto\s+pig|pequeno\s+para\s+idade/i,
+  
+  oligoamnio: /oligo[aâ]mnio|oligoidr[aâ]mnio/i,
+  
+  polidramnio: /polidr[aâ]mnio|polihidr[aâ]mnio/i,
+  
+  elective: /laqueadura|laquea[cç][aã]o|desejo\s+materno|desejo\s+da\s+paciente|iterativ|ces[aá]rea\s+anterior|gig|macrossomia|transvers|p[eé]lvic|c[oó]rmic|apresenta[cç][aã]o\s+p[eé]lvica/i,
 };
 
 // Pre-defined GA results to avoid object creation on each call
