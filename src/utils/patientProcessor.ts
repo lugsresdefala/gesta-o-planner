@@ -78,17 +78,8 @@ const processPatient = (
     };
   }
 
-  // Validate minimum required data
-  if (!maternidade) {
-    return {
-      id: patient.ID,
-      nome,
-      carteirinha,
-      maternidade_desejada: maternidade || "N/A",
-      status: "ERRO",
-      observacoes: ["Maternidade não especificada"],
-    };
-  }
+  // Patients without preference can still be scheduled
+  // Only error if they explicitly provided invalid data
 
   const dumData = patient["Data da DUM"];
   const usgData = patient["Data do Primeiro USG"];
@@ -172,8 +163,14 @@ const processPatient = (
     // Patient has no preference - try all maternities
     const maternities = ['Guarulhos', 'NotreCare', 'Salvalus', 'Cruzeiro'];
     
+    // Initialize with failure
+    agendamento = {
+      success: false,
+      observations: ["Nenhuma vaga disponível em nenhuma maternidade"],
+    };
+    
     for (const mat of maternities) {
-      agendamento = calendarManager.tryAllocateSlot(
+      const attempt = calendarManager.tryAllocateSlot(
         mat,
         dataInicio,
         dataFim,
@@ -185,7 +182,8 @@ const processPatient = (
         }
       );
       
-      if (agendamento.success) {
+      if (attempt.success) {
+        agendamento = attempt;
         break; // Found a slot!
       }
     }
