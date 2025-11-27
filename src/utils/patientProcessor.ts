@@ -464,142 +464,496 @@ const determineRecommendedGA = (
 ): RecommendedGAResult => {
   const searchText = `${diagnosticos || ''} ${indicacao || ''} ${medicacao || ''}`.toLowerCase();
 
-  // Priority checks - Cerclagem / IIC (15 weeks)
-  if (
-    searchText.includes("cerclagem") ||
-    searchText.includes("iic") ||
-    searchText.includes("incompetencia") ||
-    searchText.includes("incompetência") ||
-    searchText.includes("istmo") ||
-    searchText.includes("istmocervical")
-  ) {
+  // Helper function for keyword detection
+  const hasKeyword = (keywords: string[]): boolean => 
+    keywords.some(k => searchText.includes(k));
+
+  // ========================================
+  // PRIORITY 1: CRITICAL CONDITIONS (earliest GA)
+  // ========================================
+
+  // 1. RPMO - Rotura Prematura de Membranas (34 weeks = 238 days)
+  if (hasKeyword(["rpmo", "rotura prematura", "ruptura prematura", "amniorrexe", "bolsa rota"])) {
     return { 
-      ga: { totalDays: 105, weeks: 15, days: 0 },
-      diagnosis: "Cerclagem/IIC" 
-    }; // 15 weeks
+      ga: { totalDays: 238, weeks: 34, days: 0 },
+      diagnosis: "RPMO (Rotura Prematura de Membranas)" 
+    };
   }
 
-  // Hypertensive disorders (37 weeks)
-  if (
-    searchText.includes("hipertens") ||
-    searchText.includes("hipertensao") ||
-    searchText.includes("hipertensão") ||
-    searchText.includes("pre-eclampsia") ||
-    searchText.includes("pré-eclampsia") ||
-    searchText.includes("preeclampsia") ||
-    searchText.includes("pre eclampsia") ||
-    searchText.includes("pré eclampsia") ||
-    searchText.includes("eclampsia") ||
-    searchText.includes("hac") ||
-    searchText.includes("has") ||
-    searchText.includes("hag") ||
-    searchText.includes("dheg")
-  ) {
+  // 2. RCIU/RCF + Oligoâmnio (34 weeks = 238 days) - CRITICAL CORRECTION
+  const hasRCIU = hasKeyword(["rcf", "rciu", "restricao de crescimento", "restrição de crescimento", 
+                              "crescimento restrito", "crescimento fetal restrito", "ciur"]);
+  const hasOligoamnio = hasKeyword(["oligoamnio", "oligoâmnio", "oligoidramnio", "oligoidrâmnio", 
+                                    "oligodramnio", "oligodrâmnio"]);
+  if (hasRCIU && hasOligoamnio) {
+    return { 
+      ga: { totalDays: 238, weeks: 34, days: 0 },
+      diagnosis: "RCIU + Oligoâmnio" 
+    };
+  }
+
+  // 3. Polidrâmnio severo (MB ≥160mm) - 35-37 weeks = 245-259 days (use 245)
+  const hasPolidramnio = hasKeyword(["polidramnio", "polidrâmnio", "polihidramnio", "polihidrâmnio"]);
+  const hasSevero = hasKeyword(["sever", "grave", "acentuad", ">160", "≥160", "160mm"]);
+  if (hasPolidramnio && hasSevero) {
+    return { 
+      ga: { totalDays: 245, weeks: 35, days: 0 },
+      diagnosis: "Polidrâmnio severo (MB ≥160mm)" 
+    };
+  }
+
+  // 4. RCF <p3 com Doppler alterado ou comorbidade (34 weeks = 238 days)
+  const hasDopplerAlterado = hasKeyword(["doppler alter", "fluxo alter", "ducto venoso alter", 
+                                         "dv alter", "centralização", "diástole zero", 
+                                         "diástole reversa", "ausência diástole"]);
+  const hasP3 = hasKeyword(["<p3", "< p3", "menor p3", "menor que p3", "abaixo p3", 
+                            "<3", "percentil 3", "p3"]);
+  if (hasRCIU && hasP3 && hasDopplerAlterado) {
+    return { 
+      ga: { totalDays: 238, weeks: 34, days: 0 },
+      diagnosis: "RCF <p3 com Doppler alterado" 
+    };
+  }
+
+  // 5. Pré-eclâmpsia COM deterioração / Eclâmpsia (28-37 weeks - use 196 for urgent)
+  const hasPreEclampsia = hasKeyword(["pre-eclampsia", "pré-eclampsia", "preeclampsia", 
+                                      "pre eclampsia", "pré eclampsia", "pe", "eclampsia", 
+                                      "dheg", "sheg"]);
+  const hasDeterioration = hasKeyword(["deteriora", "grave", "sever", "iminência", "eminência",
+                                       "hellp", "eclampsia", "convuls"]);
+  if (hasPreEclampsia && hasDeterioration) {
+    return { 
+      ga: { totalDays: 196, weeks: 28, days: 0 },
+      diagnosis: "Pré-eclâmpsia com deterioração / SHEG >28 semanas" 
+    };
+  }
+
+  // 6. DM1/DM2 com descontrole ou complicações (36-37 weeks = 252-259 days, use 252)
+  const hasDM1DM2 = hasKeyword(["dm1", "dm2", "dm 1", "dm 2", "diabetes mellitus tipo", 
+                                "diabetes tipo 1", "diabetes tipo 2", "diabetes prévia", 
+                                "diabetes pre-gestacional", "diabetes pré-gestacional",
+                                "diabetes pregestacional"]);
+  const hasDescontroleDM = hasKeyword(["descontrol", "mau controle", "mal control", 
+                                       "hemoglobina glicada", "hba1c", "complicaç", 
+                                       "retinopatia", "nefropatia", "vasculopatia"]);
+  if (hasDM1DM2 && hasDescontroleDM) {
+    return { 
+      ga: { totalDays: 252, weeks: 36, days: 0 },
+      diagnosis: "DM1/DM2 com descontrole ou complicações" 
+    };
+  }
+
+  // ========================================
+  // PRIORITY 2: HIGH-PRIORITY CONDITIONS (36-37 weeks)
+  // ========================================
+
+  // 7. Oligoâmnio isolado (MBV <20mm) - 36-37 weeks = 252-259 days (use 252)
+  const hasOligoIsolado = hasKeyword(["mbv<", "mbv <", "<20mm", "< 20mm", "mbv 0", 
+                                      "anidram", "anidrâm"]);
+  if (hasOligoamnio && (hasOligoIsolado || !hasRCIU)) {
+    // If oligoâmnio is present without RCIU, use 36-37 weeks
+    return { 
+      ga: { totalDays: 252, weeks: 36, days: 0 },
+      diagnosis: "Oligoâmnio isolado" 
+    };
+  }
+
+  // 8. Gestação gemelar monocoriônica (36 weeks = 252 days)
+  const hasGemelar = hasKeyword(["gemelar", "gêmeos", "gemeos", "gemelares", "dupla", 
+                                 "trigêmeos", "trigemelar"]);
+  const hasMonocorionica = hasKeyword(["monocorion", "mono/di", "mono/mono", "monoamniot", 
+                                       "mcda", "mcma", "mc"]);
+  if (hasGemelar && hasMonocorionica) {
+    return { 
+      ga: { totalDays: 252, weeks: 36, days: 0 },
+      diagnosis: "Gestação gemelar monocoriônica" 
+    };
+  }
+
+  // 9. Placenta prévia com acretismo (36 weeks = 252 days)
+  const hasAcretismo = hasKeyword(["acretismo", "acreta", "increta", "percreta", 
+                                   "espectro placentário", "morbidamente aderida"]);
+  const hasPlacentaPrevia = hasKeyword(["placenta previa", "placenta prévia", "pp centro", 
+                                        "pp marginal", "inserção baixa"]);
+  if (hasPlacentaPrevia && hasAcretismo) {
+    return { 
+      ga: { totalDays: 252, weeks: 36, days: 0 },
+      diagnosis: "Placenta prévia com acretismo" 
+    };
+  }
+
+  // 10. Aloimunização grave (36 weeks = 252 days)
+  const hasAloimunizacao = hasKeyword(["aloimuniza", "isoimuniza", "rh negativ", 
+                                       "coombs indireto", "anticorpo irregular", 
+                                       "sensibiliza"]);
+  const hasGraveAloi = hasKeyword(["grave", "sever", "hidropsia", "anemia fetal", 
+                                   "transfus"]);
+  if (hasAloimunizacao && hasGraveAloi) {
+    return { 
+      ga: { totalDays: 252, weeks: 36, days: 0 },
+      diagnosis: "Aloimunização grave" 
+    };
+  }
+
+  // ========================================
+  // PRIORITY 3: MODERATE CONDITIONS (37 weeks)
+  // ========================================
+
+  // 11. IIC/Cerclagem - 37 weeks for birth/removal (259 days) - CRITICAL CORRECTION
+  if (hasKeyword(["cerclagem", "iic", "incompetencia istmo", "incompetência istmo", 
+                  "insuficiencia cervical", "insuficiência cervical", "istmocervical"])) {
     return { 
       ga: { totalDays: 259, weeks: 37, days: 0 },
-      diagnosis: "Hipertensão/Pré-eclâmpsia" 
-    }; // 37 weeks
+      diagnosis: "IIC/Cerclagem (parto/remoção)" 
+    };
   }
 
-  // DMG with insulin (38 weeks) - must have "insulina" but NOT "sem insulina"
-  if ((searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") || 
-       searchText.includes("diabetes gestacional")) && 
-      searchText.includes("insulina") && 
-      !searchText.includes("sem insulina") &&
-      !searchText.includes("s/ insulina")) {
-    return { 
-      ga: { totalDays: 266, weeks: 38, days: 0 },
-      diagnosis: "DMG com insulina" 
-    }; // 38 weeks
-  }
-
-  // Also check for "com insulina" explicitly
-  if ((searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") || 
-       searchText.includes("diabetes gestacional")) && 
-      searchText.includes("com insulina")) {
-    return { 
-      ga: { totalDays: 266, weeks: 38, days: 0 },
-      diagnosis: "DMG com insulina" 
-    }; // 38 weeks
-  }
-
-  // DMG without insulin (40 weeks)
-  if (searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") ||
-      searchText.includes("diabetes gestacional")) {
-    return { 
-      ga: { totalDays: 280, weeks: 40, days: 0 },
-      diagnosis: "DMG sem insulina" 
-    }; // 40 weeks
-  }
-
-  // RCF - Restrição de Crescimento Fetal (37 weeks)
-  if (
-    searchText.includes("rcf") ||
-    searchText.includes("rciu") ||
-    searchText.includes("restricao de crescimento") ||
-    searchText.includes("restrição de crescimento") ||
-    searchText.includes("crescimento restrito")
-  ) {
+  // 12. Hipertensão gestacional (37 weeks = 259 days)
+  if (hasKeyword(["hipertensao gestacional", "hipertensão gestacional", "hag", "has gestacional"])) {
     return { 
       ga: { totalDays: 259, weeks: 37, days: 0 },
-      diagnosis: "RCF/RCIU" 
-    }; // 37 weeks
+      diagnosis: "Hipertensão gestacional" 
+    };
   }
 
-  // Oligoâmnio (37 weeks)
-  if (
-    searchText.includes("oligoamnio") ||
-    searchText.includes("oligoâmnio") ||
-    searchText.includes("oligoidramnio") ||
-    searchText.includes("oligoidrâmnio")
-  ) {
+  // 13. Pré-eclâmpsia SEM deterioração (37 weeks = 259 days)
+  if (hasPreEclampsia && !hasDeterioration) {
     return { 
       ga: { totalDays: 259, weeks: 37, days: 0 },
-      diagnosis: "Oligoâmnio" 
-    }; // 37 weeks
+      diagnosis: "Pré-eclâmpsia sem deterioração" 
+    };
   }
 
-  // Polidrâmnio (38 weeks)
-  if (
-    searchText.includes("polidramnio") ||
-    searchText.includes("polidrâmnio") ||
-    searchText.includes("polihidramnio") ||
-    searchText.includes("polihidrâmnio")
-  ) {
+  // 14. Hipertensão crônica de difícil controle (3+ drogas) - 37 weeks = 259 days
+  const hasHAC = hasKeyword(["hipertensao cronica", "hipertensão crônica", "hac", 
+                             "hipertensao previa", "hipertensão prévia", "has crônica", 
+                             "has cronica"]);
+  const hasDificilControle = hasKeyword(["dificil controle", "difícil controle", 
+                                         "refratária", "refrataria", "3 drogas", 
+                                         "três drogas", "multiplas drogas", "múltiplas drogas"]);
+  if (hasHAC && hasDificilControle) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "HAC de difícil controle (3+ drogas)" 
+    };
+  }
+
+  // 15. DMG com insulina e descontrole ou repercussão fetal (37 weeks = 259 days)
+  const hasDMG = hasKeyword(["dmg", "diabetes mellitus gestacional", "diabetes gestacional"]);
+  const hasInsulina = hasKeyword(["insulina"]) && !hasKeyword(["sem insulina", "s/ insulina"]);
+  const hasComInsulina = hasKeyword(["com insulina", "uso de insulina", "insulinizad"]);
+  const hasDescontroleDMG = hasKeyword(["descontrol", "mau controle", "mal control", 
+                                        "repercuss", "macrossomia", "gig", "polihidram"]);
+  if (hasDMG && (hasInsulina || hasComInsulina) && hasDescontroleDMG) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "DMG com insulina + descontrole/repercussão fetal" 
+    };
+  }
+
+  // 16. Lúpus em atividade (37 weeks = 259 days)
+  const hasLupus = hasKeyword(["lupus", "lúpus", "les", "lúpus eritematoso"]);
+  const hasAtividade = hasKeyword(["ativ", "flare", "exacerba", "descompens"]);
+  if (hasLupus && hasAtividade) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Lúpus Eritematoso Sistêmico em atividade" 
+    };
+  }
+
+  // 17. RCF <p3 sem Doppler alterado (37 weeks = 259 days)
+  if (hasRCIU && hasP3 && !hasDopplerAlterado) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "RCF <p3 sem alteração Doppler" 
+    };
+  }
+
+  // 18. Líquido amniótico limítrofe (37-39 weeks = 259-273 days, use 259)
+  const hasLALimitrofe = hasKeyword(["limitrofe", "limítrofe", "borderline", 
+                                     "la diminuido", "la diminuído", "la reduzido"]);
+  if (hasLALimitrofe) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Líquido amniótico limítrofe" 
+    };
+  }
+
+  // 19. Gestação gemelar dicoriônica com complicações (37 weeks = 259 days)
+  const hasDicorionica = hasKeyword(["dicorion", "di/di", "dcda", "dc"]);
+  const hasComplicacaoGemelar = hasKeyword(["complic", "discordant", "rciu", "rcf"]);
+  if (hasGemelar && hasDicorionica && hasComplicacaoGemelar) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Gestação gemelar dicoriônica com complicações" 
+    };
+  }
+
+  // ========================================
+  // PRIORITY 4: MODERATE-LATE CONDITIONS (38 weeks)
+  // ========================================
+
+  // 20. DMG com insulina, bom controle, sem repercussão fetal (38 weeks = 266 days)
+  if (hasDMG && (hasInsulina || hasComInsulina) && !hasDescontroleDMG) {
     return { 
       ga: { totalDays: 266, weeks: 38, days: 0 },
-      diagnosis: "Polidrâmnio" 
-    }; // 38 weeks
+      diagnosis: "DMG com insulina, bom controle" 
+    };
   }
 
-  // Elective indications (39 weeks)
-  if (
-    searchText.includes("laqueadura") ||
-    searchText.includes("laqueação") ||
-    searchText.includes("desejo") ||
-    searchText.includes("materno") ||
-    searchText.includes("pelvic") ||
-    searchText.includes("pélvic") ||
-    searchText.includes("iterativ") ||
-    searchText.includes("cesarea anterior") ||
-    searchText.includes("cesárea anterior") ||
-    searchText.includes("gig") ||
-    searchText.includes("macrossomia") ||
-    searchText.includes("transvers") ||
-    searchText.includes("cormic") ||
-    searchText.includes("córmic")
-  ) {
+  // 21. DM1/DM2 com bom controle, sem complicações (38 weeks = 266 days)
+  if (hasDM1DM2 && !hasDescontroleDM) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "DM1/DM2 com bom controle" 
+    };
+  }
+
+  // 22. Natimorto em gestação anterior (38-39 weeks = 266-273 days, use 266)
+  if (hasKeyword(["natimorto", "óbito fetal", "obito fetal", "of anterior", 
+                  "óbito fetal anterior", "morte fetal", "perda fetal tardia"])) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Natimorto em gestação anterior" 
+    };
+  }
+
+  // 23. Trombofilias ou antecedente de trombose (38-39 weeks = 266-273 days, use 266)
+  if (hasKeyword(["trombofil", "trombose", "tvp", "tep", "anticoagul", 
+                  "heparina", "enoxaparina", "fator v leiden", "protromb", 
+                  "antitromb", "proteína c", "proteina c", "proteína s", 
+                  "proteina s", "antifosfol"])) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Trombofilias/Antecedente de trombose" 
+    };
+  }
+
+  // 24. Anemia falciforme (38-39 weeks = 266-273 days, use 266)
+  if (hasKeyword(["falciforme", "falcemia", "hbss", "hbsc", "drepanocit"])) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Anemia falciforme" 
+    };
+  }
+
+  // 25. Lúpus sem atividade (38-39 weeks = 266-273 days, use 266)
+  if (hasLupus && !hasAtividade) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Lúpus Eritematoso Sistêmico sem atividade" 
+    };
+  }
+
+  // 26. Polidrâmnio leve-moderado (80mm < MB < 160mm) - 38-39 weeks = 266-273 days (use 266)
+  if (hasPolidramnio && !hasSevero) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Polidrâmnio leve-moderado" 
+    };
+  }
+
+  // 27. Placenta prévia sem acretismo (38 weeks = 266 days)
+  if (hasPlacentaPrevia && !hasAcretismo) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Placenta prévia sem acretismo" 
+    };
+  }
+
+  // 28. RCF p3-p10 com comorbidade materna (38 weeks = 266 days)
+  const hasPIG = hasKeyword(["pig", "p3-p10", "p3 a p10", "entre p3", "percentil 3-10"]);
+  const hasComorbidade = hasHAC || hasDMG || hasDM1DM2 || hasLupus;
+  if (hasRCIU && hasPIG && hasComorbidade) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "RCF p3-p10 (PIG) com comorbidade materna" 
+    };
+  }
+
+  // 29. Gestação gemelar dicoriônica sem complicações (38 weeks = 266 days)
+  if (hasGemelar && hasDicorionica && !hasComplicacaoGemelar) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Gestação gemelar dicoriônica sem complicações" 
+    };
+  }
+
+  // 30. Aloimunização leve/moderada (38 weeks = 266 days)
+  if (hasAloimunizacao && !hasGraveAloi) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Aloimunização leve/moderada" 
+    };
+  }
+
+  // ========================================
+  // PRIORITY 5: LATE CONDITIONS (39 weeks)
+  // ========================================
+
+  // 31. RCF p3-p10 (PIG) sem comorbidade materna - preferência 39 semanas (273 days)
+  if (hasRCIU && hasPIG && !hasComorbidade) {
     return { 
       ga: { totalDays: 273, weeks: 39, days: 0 },
-      diagnosis: "Indicação eletiva" 
-    }; // 39 weeks
+      diagnosis: "RCF p3-p10 (PIG) sem comorbidade" 
+    };
   }
 
-  // Default
+  // 32. RCF sem especificação de percentil ou Doppler (padrão 37-39, use 37)
+  if (hasRCIU) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "RCF/RCIU (sem especificação)" 
+    };
+  }
+
+  // 33. Hipertensão crônica compensada (39-40 weeks = 273-280 days, use 273) - CRITICAL CORRECTION
+  if (hasHAC && !hasDificilControle) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "HAC compensada" 
+    };
+  }
+
+  // 34. Hipertensão genérica sem especificação (37 weeks para segurança)
+  if (hasKeyword(["hipertens", "hipertensao", "hipertensão", "has"])) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Hipertensão (não especificada)" 
+    };
+  }
+
+  // 35. DMG sem insulina, com descontrole ou repercussão fetal (37-38 weeks, use 259)
+  if (hasDMG && !hasInsulina && !hasComInsulina && hasDescontroleDMG) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "DMG sem insulina + descontrole/repercussão" 
+    };
+  }
+
+  // 36. DMG sem insulina, bom controle, sem repercussão fetal (39-40 weeks = 273-280 days, use 273)
+  if (hasDMG && !hasInsulina && !hasComInsulina) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "DMG sem insulina, bom controle" 
+    };
+  }
+
+  // 37. Cesárea com laqueadura tubária (39 weeks = 273 days)
+  if (hasKeyword(["laqueadura", "laqueação", "ligadura tubária", "ligadura tubaria", 
+                  "lt", "salpingectomia"]) && 
+      hasKeyword(["cesarea", "cesárea", "parto cesare"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Cesárea com laqueadura tubária" 
+    };
+  }
+
+  // 38. Parto cesárea por desejo materno (≥39 weeks = 273 days)
+  if (hasKeyword(["desejo materno", "desejo da paciente", "cesarea eletiva", 
+                  "cesárea eletiva", "a pedido"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Cesárea por desejo materno" 
+    };
+  }
+
+  // 39. Obesidade (IMC ≥35) - 39-40 weeks = 273-280 days (use 273)
+  if (hasKeyword(["obesidade", "obesa", "imc 35", "imc 40", "imc>35", "imc >35", 
+                  "imc≥35", "obesidade morbida", "obesidade mórbida"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Obesidade (IMC ≥35)" 
+    };
+  }
+
+  // ========================================
+  // PRIORITY 6: ELECTIVE CONDITIONS (39 weeks)
+  // ========================================
+
+  // 40. Cesárea iterativa / cesárea anterior
+  if (hasKeyword(["iterativ", "cesarea anterior", "cesárea anterior", "2 cesareas", 
+                  "duas cesareas", "3 cesareas", "tres cesareas", "múltiplas cesareas"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Cesárea iterativa" 
+    };
+  }
+
+  // 41. Apresentação anômala (pélvica, transversa, córmica)
+  if (hasKeyword(["pelvic", "pélvic", "transvers", "cormic", "córmic", 
+                  "apresentação anômala", "apresentação anomala"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Apresentação anômala" 
+    };
+  }
+
+  // 42. Macrossomia / GIG
+  if (hasKeyword(["macrossomia", "gig", "grande para idade", "peso fetal estimado alto", 
+                  "pfe >4", "pfe acima"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Macrossomia/GIG" 
+    };
+  }
+
+  // 43. Malformação fetal compatível com vida (38-39 weeks, use 266)
+  if (hasKeyword(["malformacao", "malformação", "defeito congenito", "defeito congênito", 
+                  "anomalia fetal"]) && !hasKeyword(["letal", "incompativel", "incompatível"])) {
+    return { 
+      ga: { totalDays: 266, weeks: 38, days: 0 },
+      diagnosis: "Malformação fetal (compatível com vida)" 
+    };
+  }
+
+  // 44. Cardiopatia fetal (37-39 weeks depending on severity, use 259)
+  if (hasKeyword(["cardiopatia fetal", "cardiopatia congen", "defeito cardiaco", 
+                  "defeito cardíaco", "coarctacao", "coarctação", "transposição", 
+                  "transposicao", "tetralogia"])) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Cardiopatia fetal" 
+    };
+  }
+
+  // 45. Gastrosquise (36-37 weeks = 252-259 days, use 252)
+  if (hasKeyword(["gastrosquise", "gastrosquisis", "defeito parede abdominal"])) {
+    return { 
+      ga: { totalDays: 252, weeks: 36, days: 0 },
+      diagnosis: "Gastrosquise" 
+    };
+  }
+
+  // 46. Onfalocele (37-38 weeks = 259-266 days, use 259)
+  if (hasKeyword(["onfalocele", "onfalocel"])) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Onfalocele" 
+    };
+  }
+
+  // 47. Gestação gemelar genérica (sem especificação de corionicidade)
+  if (hasGemelar && !hasMonocorionica && !hasDicorionica) {
+    return { 
+      ga: { totalDays: 259, weeks: 37, days: 0 },
+      diagnosis: "Gestação gemelar (sem especificação)" 
+    };
+  }
+
+  // Laqueadura sem menção de cesárea (39 weeks)
+  if (hasKeyword(["laqueadura", "laqueação"])) {
+    return { 
+      ga: { totalDays: 273, weeks: 39, days: 0 },
+      diagnosis: "Laqueadura" 
+    };
+  }
+
+  // Default - indicação eletiva genérica
   return { 
     ga: { totalDays: 273, weeks: 39, days: 0 },
     diagnosis: "Padrão (sem diagnóstico específico)" 
-  }; // 39 weeks
+  };
 };
 
 const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date => {
