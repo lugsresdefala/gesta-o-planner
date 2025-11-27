@@ -3,9 +3,6 @@ import { CalendarManager } from "./maternityCalendar";
 
 export { CalendarManager };
 
-// Simulate processing delay for demonstration
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export const processPatients = async (
   patients: PatientData[]
 ): Promise<{ results: ProcessedResult[]; calendarManager: CalendarManager }> => {
@@ -14,8 +11,6 @@ export const processPatients = async (
   const calendarManager = new CalendarManager();
 
   for (const patient of patients) {
-    await delay(50); // Simulate processing time
-
     try {
       const result = processPatient(patient, referenceDate, calendarManager);
       results.push(result);
@@ -36,47 +31,44 @@ export const processPatients = async (
   return { results, calendarManager };
 };
 
+// Pre-defined set for "no preference" values - O(1) lookup
+const NO_PREFERENCE_VALUES = new Set([
+  'ndn', '--', '-', '', 'nada', 'n/a', 'na',
+  'sem preferencia', 'sem preferência', 'qualquer',
+  'qualquer uma', 'tanto faz', 'nenhuma'
+]);
+
+// Maternity pattern matching with keywords - check most specific patterns first
+const MATERNITY_PATTERNS: Array<{ keywords: string[]; result: string }> = [
+  { keywords: ['guarulhos', 'guaru'], result: 'Guarulhos' },
+  { keywords: ['notrecare', 'notre care', 'notre-care', 'notre'], result: 'NotreCare' },
+  { keywords: ['salvalus', 'salva lus'], result: 'Salvalus' },
+  { keywords: ['cruzeiro', 'do carmo', 'ns do carmo', 'nossa senhora'], result: 'Cruzeiro' },
+];
+
 // Normalize maternity names from TSV to system names
 const normalizeMaternityName = (raw: string): string | null => {
   if (!raw) return null;
   
-  const normalized = raw.toLowerCase().trim().replace(/\s+/g, ' '); // Normaliza espaços
+  const normalized = raw.toLowerCase().trim().replace(/\s+/g, ' ');
   
-  // Map common variations to system names (always return PascalCase used by CalendarManager)
-  if (normalized.includes('guarulhos') || 
-      normalized.includes('guaru')) return 'Guarulhos';
-  if (normalized.includes('notrecare') || 
-      normalized.includes('notre care') || 
-      normalized.includes('notre-care') ||
-      normalized.includes('notre')) return 'NotreCare';
-  if (normalized.includes('salvalus') ||
-      normalized.includes('salva lus')) return 'Salvalus';
-  if (normalized.includes('cruzeiro') || 
-      normalized.includes('do carmo') ||
-      normalized.includes('ns do carmo') ||
-      normalized.includes('nossa senhora')) return 'Cruzeiro';
+  // Fast O(1) lookup for "no preference" values
+  if (NO_PREFERENCE_VALUES.has(normalized)) {
+    return null;
+  }
   
-  // Handle "no preference" variations
-  if (normalized === 'ndn' || 
-      normalized === '--' || 
-      normalized === '-' ||
-      normalized === '' ||
-      normalized === 'nada' ||
-      normalized === 'n/a' ||
-      normalized === 'na' ||
-      normalized === 'sem preferencia' ||
-      normalized === 'sem preferência' ||
-      normalized === 'qualquer' ||
-      normalized === 'qualquer uma' ||
-      normalized === 'tanto faz' ||
-      normalized === 'nenhuma') {
-    return null; // Will allocate to any available maternity
+  // Check maternity patterns
+  for (const { keywords, result } of MATERNITY_PATTERNS) {
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword)) {
+        return result;
+      }
+    }
   }
   
   // Preservar valor original para análise/debug
-  // Isso permite identificar erros de digitação nos logs
   console.warn(`Maternidade não reconhecida: "${raw}". Usando valor original.`);
-  return raw.trim(); // Retorna o valor original limpo
+  return raw.trim();
 };
 
 const processPatient = (
@@ -457,6 +449,33 @@ interface RecommendedGAResult {
   diagnosis: string;
 }
 
+// Pre-compiled regex patterns for diagnosis matching - avoids re-creating patterns on each call
+const DIAGNOSIS_PATTERNS = {
+  cerclagem: /cerclagem|iic|incompetencia|incompetência|istmo|istmocervical/,
+  hypertension: /hipertens|hipertensao|hipertensão|pre-eclampsia|pré-eclampsia|preeclampsia|pre eclampsia|pré eclampsia|eclampsia|hac|has|hag|dheg/,
+  dmg: /dmg|diabetes mellitus gestacional|diabetes gestacional/,
+  insulinWith: /com insulina/,
+  insulinWithout: /sem insulina|s\/ insulina/,
+  insulin: /insulina/,
+  rcf: /rcf|rciu|restricao de crescimento|restrição de crescimento|crescimento restrito/,
+  oligoamnio: /oligoamnio|oligoâmnio|oligoidramnio|oligoidrâmnio/,
+  polidramnio: /polidramnio|polidrâmnio|polihidramnio|polihidrâmnio/,
+  elective: /laqueadura|laqueação|desejo|materno|pelvic|pélvic|iterativ|cesarea anterior|cesárea anterior|gig|macrossomia|transvers|cormic|córmic/,
+};
+
+// Pre-defined GA results to avoid object creation on each call
+const GA_RESULTS: Record<string, RecommendedGAResult> = {
+  cerclagem: { ga: { totalDays: 105, weeks: 15, days: 0 }, diagnosis: "Cerclagem/IIC" },
+  hypertension: { ga: { totalDays: 259, weeks: 37, days: 0 }, diagnosis: "Hipertensão/Pré-eclâmpsia" },
+  dmgWithInsulin: { ga: { totalDays: 266, weeks: 38, days: 0 }, diagnosis: "DMG com insulina" },
+  dmgWithoutInsulin: { ga: { totalDays: 280, weeks: 40, days: 0 }, diagnosis: "DMG sem insulina" },
+  rcf: { ga: { totalDays: 259, weeks: 37, days: 0 }, diagnosis: "RCF/RCIU" },
+  oligoamnio: { ga: { totalDays: 259, weeks: 37, days: 0 }, diagnosis: "Oligoâmnio" },
+  polidramnio: { ga: { totalDays: 266, weeks: 38, days: 0 }, diagnosis: "Polidrâmnio" },
+  elective: { ga: { totalDays: 273, weeks: 39, days: 0 }, diagnosis: "Indicação eletiva" },
+  default: { ga: { totalDays: 273, weeks: 39, days: 0 }, diagnosis: "Padrão (sem diagnóstico específico)" },
+};
+
 const determineRecommendedGA = (
   diagnosticos: string,
   indicacao: string,
@@ -465,141 +484,52 @@ const determineRecommendedGA = (
   const searchText = `${diagnosticos || ''} ${indicacao || ''} ${medicacao || ''}`.toLowerCase();
 
   // Priority checks - Cerclagem / IIC (15 weeks)
-  if (
-    searchText.includes("cerclagem") ||
-    searchText.includes("iic") ||
-    searchText.includes("incompetencia") ||
-    searchText.includes("incompetência") ||
-    searchText.includes("istmo") ||
-    searchText.includes("istmocervical")
-  ) {
-    return { 
-      ga: { totalDays: 105, weeks: 15, days: 0 },
-      diagnosis: "Cerclagem/IIC" 
-    }; // 15 weeks
+  if (DIAGNOSIS_PATTERNS.cerclagem.test(searchText)) {
+    return GA_RESULTS.cerclagem;
   }
 
   // Hypertensive disorders (37 weeks)
-  if (
-    searchText.includes("hipertens") ||
-    searchText.includes("hipertensao") ||
-    searchText.includes("hipertensão") ||
-    searchText.includes("pre-eclampsia") ||
-    searchText.includes("pré-eclampsia") ||
-    searchText.includes("preeclampsia") ||
-    searchText.includes("pre eclampsia") ||
-    searchText.includes("pré eclampsia") ||
-    searchText.includes("eclampsia") ||
-    searchText.includes("hac") ||
-    searchText.includes("has") ||
-    searchText.includes("hag") ||
-    searchText.includes("dheg")
-  ) {
-    return { 
-      ga: { totalDays: 259, weeks: 37, days: 0 },
-      diagnosis: "Hipertensão/Pré-eclâmpsia" 
-    }; // 37 weeks
+  if (DIAGNOSIS_PATTERNS.hypertension.test(searchText)) {
+    return GA_RESULTS.hypertension;
   }
 
-  // DMG with insulin (38 weeks) - must have "insulina" but NOT "sem insulina"
-  if ((searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") || 
-       searchText.includes("diabetes gestacional")) && 
-      searchText.includes("insulina") && 
-      !searchText.includes("sem insulina") &&
-      !searchText.includes("s/ insulina")) {
-    return { 
-      ga: { totalDays: 266, weeks: 38, days: 0 },
-      diagnosis: "DMG com insulina" 
-    }; // 38 weeks
-  }
-
-  // Also check for "com insulina" explicitly
-  if ((searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") || 
-       searchText.includes("diabetes gestacional")) && 
-      searchText.includes("com insulina")) {
-    return { 
-      ga: { totalDays: 266, weeks: 38, days: 0 },
-      diagnosis: "DMG com insulina" 
-    }; // 38 weeks
-  }
-
-  // DMG without insulin (40 weeks)
-  if (searchText.includes("dmg") || searchText.includes("diabetes mellitus gestacional") ||
-      searchText.includes("diabetes gestacional")) {
-    return { 
-      ga: { totalDays: 280, weeks: 40, days: 0 },
-      diagnosis: "DMG sem insulina" 
-    }; // 40 weeks
+  // DMG checks - more complex logic due to insulin conditions
+  if (DIAGNOSIS_PATTERNS.dmg.test(searchText)) {
+    // DMG with insulin (38 weeks) - must have "insulina" but NOT "sem insulina"
+    if (DIAGNOSIS_PATTERNS.insulin.test(searchText) && 
+        !DIAGNOSIS_PATTERNS.insulinWithout.test(searchText)) {
+      return GA_RESULTS.dmgWithInsulin;
+    }
+    // Also check for "com insulina" explicitly
+    if (DIAGNOSIS_PATTERNS.insulinWith.test(searchText)) {
+      return GA_RESULTS.dmgWithInsulin;
+    }
+    // DMG without insulin (40 weeks)
+    return GA_RESULTS.dmgWithoutInsulin;
   }
 
   // RCF - Restrição de Crescimento Fetal (37 weeks)
-  if (
-    searchText.includes("rcf") ||
-    searchText.includes("rciu") ||
-    searchText.includes("restricao de crescimento") ||
-    searchText.includes("restrição de crescimento") ||
-    searchText.includes("crescimento restrito")
-  ) {
-    return { 
-      ga: { totalDays: 259, weeks: 37, days: 0 },
-      diagnosis: "RCF/RCIU" 
-    }; // 37 weeks
+  if (DIAGNOSIS_PATTERNS.rcf.test(searchText)) {
+    return GA_RESULTS.rcf;
   }
 
   // Oligoâmnio (37 weeks)
-  if (
-    searchText.includes("oligoamnio") ||
-    searchText.includes("oligoâmnio") ||
-    searchText.includes("oligoidramnio") ||
-    searchText.includes("oligoidrâmnio")
-  ) {
-    return { 
-      ga: { totalDays: 259, weeks: 37, days: 0 },
-      diagnosis: "Oligoâmnio" 
-    }; // 37 weeks
+  if (DIAGNOSIS_PATTERNS.oligoamnio.test(searchText)) {
+    return GA_RESULTS.oligoamnio;
   }
 
   // Polidrâmnio (38 weeks)
-  if (
-    searchText.includes("polidramnio") ||
-    searchText.includes("polidrâmnio") ||
-    searchText.includes("polihidramnio") ||
-    searchText.includes("polihidrâmnio")
-  ) {
-    return { 
-      ga: { totalDays: 266, weeks: 38, days: 0 },
-      diagnosis: "Polidrâmnio" 
-    }; // 38 weeks
+  if (DIAGNOSIS_PATTERNS.polidramnio.test(searchText)) {
+    return GA_RESULTS.polidramnio;
   }
 
   // Elective indications (39 weeks)
-  if (
-    searchText.includes("laqueadura") ||
-    searchText.includes("laqueação") ||
-    searchText.includes("desejo") ||
-    searchText.includes("materno") ||
-    searchText.includes("pelvic") ||
-    searchText.includes("pélvic") ||
-    searchText.includes("iterativ") ||
-    searchText.includes("cesarea anterior") ||
-    searchText.includes("cesárea anterior") ||
-    searchText.includes("gig") ||
-    searchText.includes("macrossomia") ||
-    searchText.includes("transvers") ||
-    searchText.includes("cormic") ||
-    searchText.includes("córmic")
-  ) {
-    return { 
-      ga: { totalDays: 273, weeks: 39, days: 0 },
-      diagnosis: "Indicação eletiva" 
-    }; // 39 weeks
+  if (DIAGNOSIS_PATTERNS.elective.test(searchText)) {
+    return GA_RESULTS.elective;
   }
 
   // Default
-  return { 
-    ga: { totalDays: 273, weeks: 39, days: 0 },
-    diagnosis: "Padrão (sem diagnóstico específico)" 
-  }; // 39 weeks
+  return GA_RESULTS.default;
 };
 
 const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date => {

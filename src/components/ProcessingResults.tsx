@@ -48,13 +48,18 @@ const ProcessingResults = ({ results, patients }: ProcessingResultsProps) => {
     },
   };
 
-  const stats = {
-    total: results.length,
-    agendada: results.filter((r) => r.status === "AGENDADA").length,
-    jaAgendada: results.filter((r) => r.status === "JÁ_AGENDADA").length,
-    naoAgendada: results.filter((r) => r.status === "NÃO_AGENDADA").length,
-    erro: results.filter((r) => r.status === "ERRO").length,
-  };
+  // Calculate stats in a single pass instead of multiple filter operations
+  const stats = results.reduce(
+    (acc, r) => {
+      acc.total++;
+      if (r.status === "AGENDADA") acc.agendada++;
+      else if (r.status === "JÁ_AGENDADA") acc.jaAgendada++;
+      else if (r.status === "NÃO_AGENDADA") acc.naoAgendada++;
+      else if (r.status === "ERRO") acc.erro++;
+      return acc;
+    },
+    { total: 0, agendada: 0, jaAgendada: 0, naoAgendada: 0, erro: 0 }
+  );
 
   const handleExportExcel = () => {
     exportAllResults(results);
