@@ -418,19 +418,56 @@ const parseDate = (dateStr: string): Date | null => {
   if (!dateStr) return null;
   
   try {
-    // Handle MM/DD/YYYY format
-    const parts = dateStr.split("/");
-    if (parts.length === 3) {
-      const month = parseInt(parts[0]) - 1; // Month is 0-indexed
-      const day = parseInt(parts[1]);
-      const year = parseInt(parts[2]);
-      return new Date(year, month, day);
+    const parts = dateStr.trim().split("/");
+    if (parts.length !== 3) return null;
+
+    const [part1, part2, part3] = parts.map(p => parseInt(p, 10));
+    
+    // Detectar formato baseado em valores numéricos
+    // Se part1 > 12, é DD/MM/YYYY (formato brasileiro)
+    if (part1 > 12) {
+      const day = part1;
+      const month = part2 - 1; // 0-indexed
+      const year = part3;
+      const date = new Date(year, month, day);
+      
+      // Validar se a data é válida
+      if (isNaN(date.getTime())) return null;
+      if (date.getMonth() !== month || date.getDate() !== day) return null;
+      
+      return date;
     }
+    
+    // Se part2 > 12, é MM/DD/YYYY (formato americano)
+    if (part2 > 12) {
+      const month = part1 - 1; // 0-indexed
+      const day = part2;
+      const year = part3;
+      const date = new Date(year, month, day);
+      
+      // Validar se a data é válida
+      if (isNaN(date.getTime())) return null;
+      if (date.getMonth() !== month || date.getDate() !== day) return null;
+      
+      return date;
+    }
+    
+    // Caso ambíguo (ex: 05/03/2025) - assumir DD/MM/YYYY (padrão brasileiro)
+    const day = part1;
+    const month = part2 - 1;
+    const year = part3;
+    const date = new Date(year, month, day);
+    
+    // Validar se a data é válida
+    if (isNaN(date.getTime())) return null;
+    if (date.getMonth() !== month || date.getDate() !== day) return null;
+    
+    return date;
+    
   } catch (error) {
     console.error("Error parsing date:", dateStr, error);
+    return null;
   }
-  
-  return null;
 };
 
 const formatGA = (ga: GestationalAge): string => {
