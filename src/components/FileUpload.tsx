@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
-import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, ClipboardPaste } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientData } from "@/types/patient";
 import { SimplifiedPatientData } from "@/types/simplifiedPatient";
 import { toast } from "sonner";
@@ -14,6 +16,7 @@ const FileUpload = ({ onUpload, onSimplifiedUpload }: FileUploadProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileStatus, setFileStatus] = useState<"idle" | "success" | "error">("idle");
+  const [pastedContent, setPastedContent] = useState("");
 
   const parseTSV = (text: string): { type: "detailed" | "simplified"; data: any[] } => {
     const lines = text.split("\n").filter(line => line.trim());
@@ -94,7 +97,7 @@ const FileUpload = ({ onUpload, onSimplifiedUpload }: FileUploadProps) => {
 
       reader.readAsText(file);
     },
-    [onUpload]
+    [onUpload, onSimplifiedUpload]
   );
 
   const handleDrop = useCallback(
@@ -130,80 +133,175 @@ const FileUpload = ({ onUpload, onSimplifiedUpload }: FileUploadProps) => {
     [handleFile]
   );
 
+  const handlePastedContent = () => {
+    if (!pastedContent.trim()) {
+      toast.error("Cole o conteúdo TSV na área de texto");
+      return;
+    }
+
+    try {
+      const result = parseTSV(pastedContent);
+      
+      if (result.data.length === 0) {
+        throw new Error("Nenhum paciente encontrado no conteúdo");
+      }
+
+      setFileStatus("success");
+      
+      if (result.type === "simplified") {
+        if (onSimplifiedUpload) {
+          onSimplifiedUpload(result.data as SimplifiedPatientData[]);
+          toast.success(`${result.data.length} pacientes carregados (formato simplificado)`);
+        } else {
+          toast.error("Formato simplificado não suportado nesta visualização");
+          setFileStatus("error");
+          return;
+        }
+      } else {
+        onUpload(result.data as PatientData[]);
+        toast.success(`${result.data.length} pacientes carregados (formato detalhado)`);
+      }
+      
+      setPastedContent("");
+    } catch (error) {
+      console.error("Erro ao processar conteúdo:", error);
+      toast.error("Erro ao processar conteúdo TSV");
+      setFileStatus("error");
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={`
-          relative flex min-h-[300px] flex-col items-center justify-center rounded-lg border-2 border-dashed 
-          transition-all duration-200
-          ${
-            isDragging
-              ? "border-primary bg-primary/5"
-              : fileStatus === "success"
-              ? "border-success bg-success/5"
-              : fileStatus === "error"
-              ? "border-destructive bg-destructive/5"
-              : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/40"
-          }
-        `}
-      >
-        <input
-          type="file"
-          accept=".tsv,.txt"
-          onChange={handleFileInput}
-          className="absolute inset-0 cursor-pointer opacity-0"
-          id="file-upload"
-        />
-        
-        <div className="flex flex-col items-center gap-4 p-8 text-center">
-          {fileStatus === "success" ? (
-            <CheckCircle2 className="h-16 w-16 text-success" />
-          ) : fileStatus === "error" ? (
-            <AlertCircle className="h-16 w-16 text-destructive" />
-          ) : (
-            <Upload className="h-16 w-16 text-muted-foreground" />
-          )}
+    <Tabs defaultValue="upload" className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="upload" className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
+          Upload de Arquivo
+        </TabsTrigger>
+        <TabsTrigger value="paste" className="flex items-center gap-2">
+          <ClipboardPaste className="h-4 w-4" />
+          Colar Conteúdo
+        </TabsTrigger>
+      </TabsList>
 
-          {fileName ? (
-            <div className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              <span className="font-medium text-foreground">{fileName}</span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-lg font-medium text-foreground">
-                Arraste o arquivo TSV aqui
-              </p>
-              <p className="text-sm text-muted-foreground">
-                ou clique para selecionar
-              </p>
-            </div>
-          )}
+      <TabsContent value="upload" className="space-y-4">
+        <div
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          className={`
+            relative flex min-h-[300px] flex-col items-center justify-center rounded-lg border-2 border-dashed 
+            transition-all duration-200
+            ${
+              isDragging
+                ? "border-primary bg-primary/5"
+                : fileStatus === "success"
+                ? "border-success bg-success/5"
+                : fileStatus === "error"
+                ? "border-destructive bg-destructive/5"
+                : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/40"
+            }
+          `}
+        >
+          <input
+            type="file"
+            accept=".tsv,.txt"
+            onChange={handleFileInput}
+            className="absolute inset-0 cursor-pointer opacity-0"
+            id="file-upload"
+          />
+          
+          <div className="flex flex-col items-center gap-4 p-8 text-center">
+            {fileStatus === "success" ? (
+              <CheckCircle2 className="h-16 w-16 text-success" />
+            ) : fileStatus === "error" ? (
+              <AlertCircle className="h-16 w-16 text-destructive" />
+            ) : (
+              <Upload className="h-16 w-16 text-muted-foreground" />
+            )}
 
-          <Button type="button" variant="outline" size="sm" asChild>
-            <label htmlFor="file-upload" className="cursor-pointer">
-              Selecionar Arquivo
+            {fileName ? (
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                <span className="font-medium text-foreground">{fileName}</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-lg font-medium text-foreground">
+                  Arraste o arquivo TSV aqui
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  ou clique para selecionar
+                </p>
+              </div>
+            )}
+
+            <Button type="button" variant="outline" size="sm" asChild>
+              <label htmlFor="file-upload" className="cursor-pointer">
+                Selecionar Arquivo
+              </label>
+            </Button>
+
+            <p className="text-xs text-muted-foreground">
+              Formato aceito: .tsv ou .txt separado por tabulação
+            </p>
+          </div>
+        </div>
+
+        {fileStatus === "success" && (
+          <div className="rounded-lg bg-success/10 p-4 text-sm text-success-foreground">
+            <p className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              Arquivo carregado com sucesso! Revise os dados na próxima aba.
+            </p>
+          </div>
+        )}
+      </TabsContent>
+
+      <TabsContent value="paste" className="space-y-4">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="paste-area" className="text-sm font-medium text-foreground">
+              Cole o conteúdo TSV abaixo
             </label>
-          </Button>
-
-          <p className="text-xs text-muted-foreground">
-            Formato aceito: .tsv ou .txt separado por tabulação
-          </p>
+            <p className="text-xs text-muted-foreground">
+              Inclua o cabeçalho e todas as linhas de dados, separados por tabulação
+            </p>
+            <Textarea
+              id="paste-area"
+              placeholder="Cole aqui o conteúdo completo do arquivo TSV (incluindo cabeçalhos)...&#10;&#10;Exemplo:&#10;ID	Nome	Idade...&#10;1	João Silva	25...&#10;2	Maria Santos	30..."
+              value={pastedContent}
+              onChange={(e) => setPastedContent(e.target.value)}
+              className="min-h-[300px] font-mono text-sm"
+            />
+          </div>
+          
+          <div className="flex items-center justify-between rounded-lg border bg-muted/20 p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FileText className="h-4 w-4" />
+              {pastedContent.trim() 
+                ? `${pastedContent.split('\n').length} linhas detectadas` 
+                : "Nenhum conteúdo colado"
+              }
+            </div>
+            <Button 
+              onClick={handlePastedContent} 
+              disabled={!pastedContent.trim()}
+            >
+              Processar Conteúdo
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {fileStatus === "success" && (
-        <div className="rounded-lg bg-success/10 p-4 text-sm text-success-foreground">
-          <p className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4" />
-            Arquivo carregado com sucesso! Revise os dados na próxima aba.
-          </p>
-        </div>
-      )}
-    </div>
+        {fileStatus === "success" && (
+          <div className="rounded-lg bg-success/10 p-4 text-sm text-success-foreground">
+            <p className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              Conteúdo processado com sucesso! Revise os dados na próxima aba.
+            </p>
+          </div>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 };
 
