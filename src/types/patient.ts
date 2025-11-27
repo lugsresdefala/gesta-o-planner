@@ -38,6 +38,7 @@ export interface ProcessedResult {
   id: string;
   nome: string;
   carteirinha: string;
+  telefone?: string;
   maternidade_desejada: string;
   maternidade_alocada?: string; // Maternity where patient was actually scheduled
   status: "AGENDADA" | "JÁ_AGENDADA" | "NÃO_AGENDADA" | "ERRO";
