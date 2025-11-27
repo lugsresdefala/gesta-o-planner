@@ -44,16 +44,19 @@ const normalizeMaternityName = (raw: string): string | null => {
   
   // Map common variations to system names
   if (normalized.includes('guarulhos')) return 'Guarulhos';
-  if (normalized.includes('notrecare') || normalized.includes('notre')) return 'NotreCare';
+  if (normalized.includes('notrecare') || normalized.includes('notre care') || normalized.includes('notre')) return 'NotreCare';
   if (normalized.includes('salvalus')) return 'Salvalus';
   if (normalized.includes('cruzeiro')) return 'Cruzeiro';
   
   // Handle "ndn" (nada a declarar - no preference)
-  if (normalized === 'ndn' || normalized === '--' || normalized === 'nada') {
+  if (normalized === 'ndn' || normalized === '--' || normalized === 'nada' || normalized === 'sem preferência' || normalized === 'sem preferencia') {
     return null; // Will allocate to any available maternity
   }
   
-  return null;
+  // Return original formatted value for unrecognized maternities
+  // This allows them to appear as "maternidade_desejada" in results
+  // and facilitates debugging of typos
+  return raw.trim();
 };
 
 const processPatient = (
@@ -235,6 +238,12 @@ const calculateGestationalAge = (
     const usgDate = parseDate(usgData);
     if (!usgDate) return null;
 
+    // Validation: Future date
+    if (usgDate.getTime() > referenceDate.getTime()) {
+      console.warn(`Data USG é futura: ${usgData}`);
+      return null;
+    }
+
     const usgWeeksNum = parseFloat(usgWeeks);
     const usgDaysNum = usgDays ? parseInt(usgDays) : 0;
     const usgTotalDays = Math.floor(usgWeeksNum * 7) + usgDaysNum;
@@ -243,6 +252,18 @@ const calculateGestationalAge = (
       (referenceDate.getTime() - usgDate.getTime()) / (1000 * 60 * 60 * 24)
     );
     const currentTotalDays = usgTotalDays + daysSinceUSG;
+
+    // Validation: GA cannot exceed 42 weeks (294 days)
+    if (currentTotalDays > 294) {
+      console.warn(`IG por USG excede 42 semanas: ${currentTotalDays} dias`);
+      return null;
+    }
+
+    // Validation: GA cannot be negative
+    if (currentTotalDays < 0) {
+      console.warn(`IG por USG é negativa: ${currentTotalDays} dias`);
+      return null;
+    }
 
     return {
       age: {
@@ -261,10 +282,28 @@ const calculateGestationalAge = (
     
     if (!dumDate || !usgDate) return null;
 
+    // Validation: Future dates
+    if (dumDate.getTime() > referenceDate.getTime()) {
+      console.warn(`DUM é data futura: ${dumData}`);
+      return null;
+    }
+    
+    if (usgDate.getTime() > referenceDate.getTime()) {
+      console.warn(`Data USG é futura: ${usgData}`);
+      return null;
+    }
+
     // Calculate GA by DUM at USG date
     const daysSinceDUM = Math.floor(
       (usgDate.getTime() - dumDate.getTime()) / (1000 * 60 * 60 * 24)
     );
+    
+    // Validation: DUM must be before USG
+    if (daysSinceDUM < 0) {
+      console.warn(`DUM (${dumData}) é posterior ao USG (${usgData})`);
+      return null;
+    }
+    
     const gaByDUMAtUSG = {
       totalDays: daysSinceDUM,
       weeks: Math.floor(daysSinceDUM / 7),
@@ -289,6 +328,18 @@ const calculateGestationalAge = (
       (referenceDate.getTime() - chosenDate.getTime()) / (1000 * 60 * 60 * 24)
     );
     const currentTotalDays = chosenGA + daysSinceChosen;
+    
+    // Validation: GA cannot exceed 42 weeks (294 days)
+    if (currentTotalDays > 294) {
+      console.warn(`IG calculada excede 42 semanas: ${currentTotalDays} dias`);
+      return null;
+    }
+    
+    // Validation: GA cannot be negative
+    if (currentTotalDays < 0) {
+      console.warn(`IG calculada é negativa: ${currentTotalDays} dias`);
+      return null;
+    }
 
     return {
       age: {
@@ -305,9 +356,27 @@ const calculateGestationalAge = (
     const dumDate = parseDate(dumData);
     if (!dumDate) return null;
 
+    // Validation: Future date
+    if (dumDate.getTime() > referenceDate.getTime()) {
+      console.warn(`DUM é data futura: ${dumData}`);
+      return null;
+    }
+
     const daysSinceDUM = Math.floor(
       (referenceDate.getTime() - dumDate.getTime()) / (1000 * 60 * 60 * 24)
     );
+
+    // Validation: GA cannot exceed 42 weeks (294 days)
+    if (daysSinceDUM > 294) {
+      console.warn(`IG por DUM excede 42 semanas: ${daysSinceDUM} dias`);
+      return null;
+    }
+
+    // Validation: GA cannot be negative
+    if (daysSinceDUM < 0) {
+      console.warn(`IG por DUM é negativa: ${daysSinceDUM} dias`);
+      return null;
+    }
 
     return {
       age: {
