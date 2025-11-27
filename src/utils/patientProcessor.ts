@@ -417,52 +417,41 @@ const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date =
 const parseDate = (dateStr: string): Date | null => {
   if (!dateStr) return null;
   
+  const isValidDate = (date: Date, month: number, day: number): boolean => {
+    return !isNaN(date.getTime()) && date.getMonth() === month && date.getDate() === day;
+  };
+  
   try {
     const parts = dateStr.trim().split("/");
     if (parts.length !== 3) return null;
 
     const [part1, part2, part3] = parts.map(p => parseInt(p, 10));
     
-    // Detectar formato baseado em valores numéricos
-    // Se part1 > 12, é DD/MM/YYYY (formato brasileiro)
+    // Detect format based on numeric values
+    // If part1 > 12, it's DD/MM/YYYY (Brazilian format)
     if (part1 > 12) {
       const day = part1;
       const month = part2 - 1; // 0-indexed
       const year = part3;
       const date = new Date(year, month, day);
-      
-      // Validar se a data é válida
-      if (isNaN(date.getTime())) return null;
-      if (date.getMonth() !== month || date.getDate() !== day) return null;
-      
-      return date;
+      return isValidDate(date, month, day) ? date : null;
     }
     
-    // Se part2 > 12, é MM/DD/YYYY (formato americano)
+    // If part2 > 12, it's MM/DD/YYYY (American format)
     if (part2 > 12) {
       const month = part1 - 1; // 0-indexed
       const day = part2;
       const year = part3;
       const date = new Date(year, month, day);
-      
-      // Validar se a data é válida
-      if (isNaN(date.getTime())) return null;
-      if (date.getMonth() !== month || date.getDate() !== day) return null;
-      
-      return date;
+      return isValidDate(date, month, day) ? date : null;
     }
     
-    // Caso ambíguo (ex: 05/03/2025) - assumir DD/MM/YYYY (padrão brasileiro)
+    // Ambiguous case (e.g., 05/03/2025) - assume DD/MM/YYYY (Brazilian standard)
     const day = part1;
     const month = part2 - 1;
     const year = part3;
     const date = new Date(year, month, day);
-    
-    // Validar se a data é válida
-    if (isNaN(date.getTime())) return null;
-    if (date.getMonth() !== month || date.getDate() !== day) return null;
-    
-    return date;
+    return isValidDate(date, month, day) ? date : null;
     
   } catch (error) {
     console.error("Error parsing date:", dateStr, error);
