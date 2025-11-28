@@ -1,6 +1,3 @@
-Segue o arquivo unificado, sem marcadores de conflito e com o bloco de condições clínicas consistente:
-
-```ts
 import { PatientData, ProcessedResult, GestationalAge } from "@/types/patient";
 import { CalendarManager } from "./maternityCalendar";
 import { findColumn } from "./columnMatcher";
@@ -961,4 +958,3 @@ const formatDate = (date: Date): string => {
     year: "numeric",
   });
 };
-```
