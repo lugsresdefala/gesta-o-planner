@@ -204,6 +204,9 @@ const processPatient = (
   const dataFim = new Date(dataInicio);
   dataFim.setDate(dataFim.getDate() + 7);
 
+  // Debug log for scheduling window validation
+  console.log(`Paciente ${patient.ID}: dataInicio=${formatDate(dataInicio)}, dataFim=${formatDate(dataFim)}, maternidade=${maternidade}`);
+
   // Extract phone number
   const telefone = patient["Informe dois telefones de contato com o paciente para que ele seja contato pelo hospital"];
   
@@ -482,13 +485,13 @@ interface RecommendedGAResult {
 const DIAGNOSIS_PATTERNS = {
   cerclagem: /cerclagem|iic|incompetencia|incompetência|istmo|istmocervical/i,
   
-  hypertension: /hipertens[aã]o|hipertensao|pre[-\s]?eclampsia|pré[-\s]?eclampsia|eclampsia|hac|has|hag|dheg|press[aã]o\s+alta|hipertens\s+descompensad/i,
+  hypertension: /hipertens[aã]o|hipertensao|pre[-\s]?eclampsia|pré[-\s]?eclampsia|eclampsia|hac|has|hag|dheg|press[aã]o\s+alta|hipertens\s+descompensad|metildopa|amlodipino|aldomet/i,
   
   dmg: /dmg|diabetes\s+mellitus\s+gestacional|diabetes\s+gestacional|diabete\s+gestacional|dmg\s+a1|dmg\s+a2/i,
   
   insulinWith: /com\s+insulina|uso\s+de\s+insulina|em\s+uso\s+de\s+insulina|insulina\s+nph|insulina\s+regular|a2(?!\d)/i,
   
-  insulinWithout: /sem\s+insulina|s[/\\]\s*insulina|dieta|a1(?!\d)|controlada\s+com\s+dieta/i,
+  insulinWithout: /sem\s+insulina|s[/\\]\s*insulina|apenas\s+dieta|controlad[ao]\s+com\s+dieta|controle.?glic[eê]mico.?dieta|a1(?!\d)/i,
   
   insulin: /insulina/i,
   
