@@ -144,6 +144,8 @@ export function calculateGAAtTargetDate(input: GACalculationInput): GAAtTargetDa
   const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
 
   // CRITICAL CHECK: Only calculate if target date is AFTER today
+  // Business rule: GA calculation is only relevant for future scheduled appointments
+  // to assist with planning. Past dates do not need GA projections.
   if (targetStart.getTime() <= todayStart.getTime()) {
     return {
       gaDays: null,
@@ -151,7 +153,7 @@ export function calculateGAAtTargetDate(input: GACalculationInput): GAAtTargetDa
       ga: null,
       method: null,
       calculated: false,
-      error: 'Target date is not in the future; GA calculation skipped'
+      error: 'Target date is not in the future; GA calculation skipped per business rule (IG só é calculada se a data agendada for futura em relação ao hoje do sistema)'
     };
   }
 

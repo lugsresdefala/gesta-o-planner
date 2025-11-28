@@ -26,6 +26,8 @@ export interface ParsedGA {
 }
 
 // Maximum valid gestational age in days (45 weeks = 315 days)
+// Extended beyond normal 40-week pregnancy to accommodate post-term pregnancies
+// and calculation edge cases. Standard pregnancy is 280 days (40 weeks).
 const MAX_GA_DAYS = 315;
 const MIN_GA_DAYS = 0;
 
