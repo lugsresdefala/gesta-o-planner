@@ -4,6 +4,13 @@ import { findColumn } from "./columnMatcher";
 
 export { CalendarManager };
 
+// Column name alternatives for maternity preference
+const MATERNITY_COLUMN_KEYWORDS = [
+  'maternidade que a paciente deseja',
+  'maternidade desejada',
+  'maternidade'
+];
+
 export const processPatients = async (
   patients: PatientData[]
 ): Promise<{ results: ProcessedResult[]; calendarManager: CalendarManager }> => {
@@ -22,7 +29,7 @@ export const processPatients = async (
         nome: patient["Nome completo da paciente"],
         carteirinha: patient["CARTEIRINHA (tem na guia que sai do sistema - não inserir CPF)"],
         telefone: patient["Informe dois telefones de contato com o paciente para que ele seja contato pelo hospital"] || undefined,
-        maternidade_desejada: patient["Maternidade que a paciente deseja"],
+        maternidade_desejada: findColumn(patient, MATERNITY_COLUMN_KEYWORDS),
         status: "ERRO",
         observacoes: ["Erro ao processar dados do paciente"],
       });
@@ -39,13 +46,16 @@ const NO_PREFERENCE_VALUES = new Set([
   'qualquer uma', 'tanto faz', 'nenhuma'
 ]);
 
-// Maternity pattern matching with keywords - check most specific patterns first
-const MATERNITY_PATTERNS: Array<{ keywords: string[]; result: string }> = [
-  { keywords: ['guarulhos', 'guaru'], result: 'Guarulhos' },
-  { keywords: ['notrecare', 'notre care', 'notre-care', 'notre'], result: 'NotreCare' },
-  { keywords: ['salvalus', 'salva lus'], result: 'Salvalus' },
-  { keywords: ['cruzeiro', 'do carmo', 'ns do carmo', 'nossa senhora'], result: 'Cruzeiro' },
-];
+// Valid maternities with canonical names - O(1) lookup
+const VALID_MATERNITIES = new Map<string, string>([
+  ['guarulhos', 'Guarulhos'],
+  ['guaru', 'Guarulhos'],
+  ['notrecare', 'NotreCare'],
+  ['notre care', 'NotreCare'],
+  ['notre-care', 'NotreCare'],
+  ['salvalus', 'Salvalus'],
+  ['cruzeiro', 'Cruzeiro'],
+]);
 
 // Normalize maternity names from TSV to system names
 const normalizeMaternityName = (raw: string): string | null => {
@@ -58,18 +68,19 @@ const normalizeMaternityName = (raw: string): string | null => {
     return null;
   }
   
-  // Check maternity patterns
-  for (const { keywords, result } of MATERNITY_PATTERNS) {
-    for (const keyword of keywords) {
-      if (normalized.includes(keyword)) {
-        return result;
-      }
+  // Direct lookup - O(1)
+  const found = VALID_MATERNITIES.get(normalized);
+  if (found) return found;
+  
+  // Fallback: check if contains any valid maternity name
+  for (const [key, value] of VALID_MATERNITIES) {
+    if (normalized.includes(key)) {
+      return value;
     }
   }
   
-  // Preservar valor original para análise/debug
-  console.warn(`Maternidade não reconhecida: "${raw}". Usando valor original.`);
-  return raw.trim();
+  console.warn(`Maternidade não reconhecida: "${raw}".`);
+  return null;
 };
 
 const processPatient = (
@@ -79,8 +90,8 @@ const processPatient = (
 ): ProcessedResult => {
   const carteirinha = patient["CARTEIRINHA (tem na guia que sai do sistema - não inserir CPF)"];
   const nome = patient["Nome completo da paciente"];
-  const maternidadeRaw = patient["Maternidade que a paciente deseja"];
-  const maternidade = normalizeMaternityName(maternidadeRaw);
+  const maternidadeRaw = findColumn(patient, MATERNITY_COLUMN_KEYWORDS);
+  const maternidade = normalizeMaternityName(maternidadeRaw || '');
   
   // Check if already scheduled
   const igPretendida = patient["Informe IG pretendida para o procedimento \n* Não confirmar essa data para a paciente, dependendo da agenda hospitalar poderemos ter uma variação\n* Para laqueaduras favor colocar data que completa 60 d"];
