@@ -149,25 +149,29 @@ const processPatient = (
   }
 
   // Determine recommended gestational age based on diagnosis
-  const diagnosticos = findColumn(patient, [
-    'diagnósticos obstétricos',
-    'diagnósticos maternos',
-    'diagnóstico',
-    'dmg',
-    'hipertensão',
-    'pre-eclampsia'
+  // Diagnósticos obstétricos maternos
+  const diagnosticosMaternos = findColumn(patient, [
+    'indique os diagnósticos obstétricos maternos',
+    'diagnósticos obstétricos maternos',
   ]);
 
+  // Diagnósticos fetais  
+  const diagnosticosFetais = findColumn(patient, [
+    'indique os diagnósticos fetais',
+    'diagnósticos fetais',
+  ]);
+
+  // Combinar ambos
+  const diagnosticos = [diagnosticosMaternos, diagnosticosFetais].filter(Boolean).join(' ');
+
   const indicacao = findColumn(patient, [
+    'informe a indicação do procedimento',
     'indicação do procedimento',
-    'indicacao',
-    'procedimento'
   ]);
 
   const medicacao = findColumn(patient, [
-    'qual medicação',
+    'indique qual medicação e dosagem',
     'medicação e dosagem',
-    'medicacao e dosagem'
   ]);
   
   // Validate diagnosticos field
@@ -478,96 +482,104 @@ interface RecommendedGAResult {
   diagnosis: string;
 }
 
-// Pre-compiled regex patterns for diagnosis matching - avoids re-creating patterns on each call
-const DIAGNOSIS_PATTERNS = {
-  cerclagem: /cerclagem|iic|incompetencia|incompetência|istmo|istmocervical/i,
+// Condições clínicas ordenadas da IG mais restritiva para a menos restritiva
+// (se paciente tem múltiplas condições, prevalece a mais restritiva)
+// Protocolos Hapvida/NotreDame
+const CLINICAL_CONDITIONS: Array<{
+  name: string;
+  pattern: RegExp;
+  weeks: number;
+  days: number;
+}> = [
+  // === 32-34 semanas ===
+  { name: "Gemelar monocoriônico monoamniótico", pattern: /mono.?cori[oô]nic.+mono.?amni[oó]t|mono.?mono/i, weeks: 32, days: 0 },
+  { name: "Trigemelar diamniótico", pattern: /trigem.+diamni/i, weeks: 32, days: 0 },
   
-  hypertension: /hipertens[aã]o|hipertensao|pre[-\s]?eclampsia|pré[-\s]?eclampsia|eclampsia|hac|has|hag|dheg|press[aã]o\s+alta|hipertens\s+descompensad/i,
+  // === 34 semanas ===
+  { name: "Rotura prematura de membranas", pattern: /rpmo|rotura.+membrana|bolsa\s+rota/i, weeks: 34, days: 0 },
+  { name: "RCIU + Oligoâmnio", pattern: /rciu.+oligo|rcf.+oligo|oligo.+rciu|oligo.+rcf/i, weeks: 34, days: 0 },
+  { name: "Placenta prévia COM acretismo", pattern: /acretismo|placenta.+acret/i, weeks: 34, days: 0 },
+  { name: "Gemelar monocoriônico diamniótico", pattern: /mono.?cori[oô]nic.+di.?amni|mono.?di/i, weeks: 34, days: 0 },
   
-  dmg: /dmg|diabetes\s+mellitus\s+gestacional|diabetes\s+gestacional|diabete\s+gestacional|dmg\s+a1|dmg\s+a2/i,
+  // === 35-36 semanas ===
+  { name: "Polidrâmnio severo", pattern: /polidr.+sever|mb\s*[>≥]\s*160|mbv\s*[>≥]\s*160/i, weeks: 35, days: 0 },
+  { name: "Trigemelar triamniótico", pattern: /trigem/i, weeks: 35, days: 0 },
+  { name: "Vasa prévia", pattern: /vasa\s*pr[ée]via/i, weeks: 36, days: 0 },
+  { name: "Placenta prévia SEM acretismo", pattern: /placenta\s*pr[ée]via|placenta\s+previa/i, weeks: 36, days: 0 },
+  { name: "Rotura uterina prévia", pattern: /rotura\s*uterina|ces[aá]rea\s+corporal/i, weeks: 36, days: 0 },
+  { name: "DM1/DM2 descompensado", pattern: /dm[12].+descomp|dm[12].+descontr|diabetes\s+tipo\s*[12].+descontr/i, weeks: 36, days: 0 },
+  { name: "RCF com Doppler alterado", pattern: /rcf.+doppler|rciu.+doppler|doppler.+alter.+rcf|doppler.+alter.+rciu/i, weeks: 36, days: 0 },
+  { name: "Oligoâmnio isolado", pattern: /oligo[aâ]mnio|oligoidr[aâ]mnio|mbv\s*<\s*2|ila\s*<\s*5/i, weeks: 36, days: 0 },
   
-  insulinWith: /com\s+insulina|uso\s+de\s+insulina|em\s+uso\s+de\s+insulina|insulina\s+nph|insulina\s+regular|a2(?!\d)/i,
+  // === 37 semanas ===
+  { name: "Pré-eclâmpsia", pattern: /pr[ée].?eclamp|pre.?eclamp|eclampsia/i, weeks: 37, days: 0 },
+  { name: "Hipertensão gestacional", pattern: /hipertens[aã]o\s+gestacional|hag|dheg/i, weeks: 37, days: 0 },
+  { name: "HAC difícil controle", pattern: /hac.+dif[ií]cil|hac.+3\s*drogas|hac.+descomp/i, weeks: 37, days: 0 },
+  { name: "IIC/Cerclagem", pattern: /iic|incompet[eê]ncia\s+istmo|cerclagem/i, weeks: 37, days: 0 },
+  { name: "DMG com insulina descompensado", pattern: /dmg.+insulina.+descomp|dmg.+insulina.+descontr|dmg.+repercuss/i, weeks: 37, days: 0 },
+  { name: "Gastrosquise", pattern: /gastrosquise/i, weeks: 37, days: 0 },
+  { name: "Mielomeningocele grave", pattern: /mielomeningocele.+grave|mielomeningocele.+ventric/i, weeks: 37, days: 0 },
+  { name: "Lúpus ativo", pattern: /l[úu]pus.+ativ|les\s+ativ/i, weeks: 37, days: 0 },
+  { name: "RCF < p3", pattern: /rcf\s*<\s*p?\s*3|rciu\s*<\s*p?\s*3|peso\s*<\s*p?\s*3/i, weeks: 37, days: 0 },
+  { name: "Gemelar dicoriônico + complicação", pattern: /gemelar.+dicori.+rcf|dicori.+rcf|gemelar.+discord/i, weeks: 37, days: 0 },
+  { name: "Aneuploidia fetal", pattern: /trissomia|aneuploidia|s[ií]ndrome\s+de\s+down/i, weeks: 37, days: 0 },
+  { name: "Gemelar dicoriônico", pattern: /gemelar|dicori[oô]nic|di.?cori[oô]nic/i, weeks: 37, days: 0 },
   
-  insulinWithout: /sem\s+insulina|s[/\\]\s*insulina|dieta|a1(?!\d)|controlada\s+com\s+dieta/i,
+  // === 38 semanas ===
+  { name: "DMG com insulina", pattern: /dmg.+insulina|insulina.+dmg|diabetes\s+gestacional.+insulina|dmg\s+a2|dm\s*g.+insulino/i, weeks: 38, days: 0 },
+  { name: "DM1/DM2 controlado", pattern: /dm[12]|dmid|diabetes\s+mellitus\s+tipo|diabetes\s+tipo\s*[12]/i, weeks: 38, days: 0 },
+  { name: "Polidrâmnio", pattern: /polidr[aâ]mnio|polihidr[aâ]mnio/i, weeks: 38, days: 0 },
+  { name: "Miomectomia prévia", pattern: /miomectomia/i, weeks: 38, days: 0 },
+  { name: "Trombofilias", pattern: /trombofilia|saaf|anticoagul|enoxaparina|clexane/i, weeks: 38, days: 0 },
+  { name: "Anemia falciforme", pattern: /anemia\s+falciforme|falciforme/i, weeks: 38, days: 0 },
+  { name: "Lúpus inativo", pattern: /l[úu]pus|les\b/i, weeks: 38, days: 0 },
+  { name: "Natimorto anterior", pattern: /natimorto|[óo]bito\s+fetal\s+anterior/i, weeks: 38, days: 0 },
+  { name: "Mielomeningocele/Onfalocele/Hérnia diafragmática", pattern: /mielomeningocele|onfalocele|h[ée]rnia\s+diafragm/i, weeks: 38, days: 0 },
+  { name: "Feto PIG", pattern: /pig|pequeno\s+para\s+idade|pfe\s*<\s*p?\s*10|peso\s*p?\s*[35](?!\d)/i, weeks: 38, days: 0 },
+  { name: "RCF p3-p10", pattern: /rcf|rciu|restri[çc][aã]o\s+de\s+crescimento/i, weeks: 38, days: 0 },
   
-  insulin: /insulina/i,
+  // === 39 semanas ===
+  { name: "HAC compensada", pattern: /hac|hipertens[aã]o\s+cr[oô]nica|has\b/i, weeks: 39, days: 0 },
+  { name: "DMG sem insulina", pattern: /dmg|diabetes\s+gestacional|dm\s+gestacional|diabetes\s+mellitus\s+gestacional/i, weeks: 39, days: 0 },
+  { name: "Hipotireoidismo", pattern: /hipotireoid|levotiroxina|puran/i, weeks: 39, days: 0 },
+  { name: "Apresentação pélvica", pattern: /p[ée]lvic|apresenta[çc][aã]o\s+p[ée]lvic|pelvico/i, weeks: 39, days: 0 },
+  { name: "Iteratividade", pattern: /iterativ|2[aª]\s*ces[aá]rea|ces[aá]rea\s+anterior/i, weeks: 39, days: 0 },
+  { name: "Macrossomia/GIG", pattern: /macrossomia|gig\b|feto\s+gig|peso\s*>\s*p?\s*90|p\s*[>≥]\s*90/i, weeks: 39, days: 0 },
+  { name: "Desejo materno", pattern: /desejo\s+materno|desejo\s+da\s+paciente/i, weeks: 39, days: 0 },
+  { name: "Laqueadura", pattern: /laqueadura|laquea[çc][aã]o|lt\b/i, weeks: 39, days: 0 },
+  { name: "Obesidade", pattern: /obesidade|imc\s*[>≥]\s*35|obesa/i, weeks: 39, days: 0 },
   
-  rcf: /rcf|rciu|restri[cç][aã]o\s+de\s+crescimento|crescimento\s+restrito|feto\s+pig|pequeno\s+para\s+idade/i,
-  
-  oligoamnio: /oligo[aâ]mnio|oligoidr[aâ]mnio/i,
-  
-  polidramnio: /polidr[aâ]mnio|polihidr[aâ]mnio/i,
-  
-  elective: /laqueadura|laquea[cç][aã]o|desejo\s+materno|desejo\s+da\s+paciente|iterativ|ces[aá]rea\s+anterior|gig|macrossomia|transvers|p[eé]lvic|c[oó]rmic|apresenta[cç][aã]o\s+p[eé]lvica/i,
-};
+  // === 40 semanas (padrão) ===
+  { name: "Gestação de baixo risco", pattern: /baixo\s+risco/i, weeks: 40, days: 0 },
+];
 
-// Pre-defined GA results to avoid object creation on each call
-const GA_RESULTS: Record<string, RecommendedGAResult> = {
-  cerclagem: { ga: { totalDays: 105, weeks: 15, days: 0 }, diagnosis: "Cerclagem/IIC" },
-  hypertension: { ga: { totalDays: 259, weeks: 37, days: 0 }, diagnosis: "Hipertensão/Pré-eclâmpsia" },
-  dmgWithInsulin: { ga: { totalDays: 266, weeks: 38, days: 0 }, diagnosis: "DMG com insulina" },
-  dmgWithoutInsulin: { ga: { totalDays: 280, weeks: 40, days: 0 }, diagnosis: "DMG sem insulina" },
-  rcf: { ga: { totalDays: 259, weeks: 37, days: 0 }, diagnosis: "RCF/RCIU" },
-  oligoamnio: { ga: { totalDays: 259, weeks: 37, days: 0 }, diagnosis: "Oligoâmnio" },
-  polidramnio: { ga: { totalDays: 266, weeks: 38, days: 0 }, diagnosis: "Polidrâmnio" },
-  elective: { ga: { totalDays: 273, weeks: 39, days: 0 }, diagnosis: "Indicação eletiva" },
-  default: { ga: { totalDays: 273, weeks: 39, days: 0 }, diagnosis: "Padrão (sem diagnóstico específico)" },
-};
-
+// Função para determinar IG recomendada
 const determineRecommendedGA = (
-  diagnosticos: string,
-  indicacao: string,
-  medicacao: string
+  diagnosticos: string | undefined,
+  indicacao: string | undefined,
+  medicacao: string | undefined
 ): RecommendedGAResult => {
   const searchText = `${diagnosticos || ''} ${indicacao || ''} ${medicacao || ''}`.toLowerCase();
-
-  // Priority checks - Cerclagem / IIC (15 weeks)
-  if (DIAGNOSIS_PATTERNS.cerclagem.test(searchText)) {
-    return GA_RESULTS.cerclagem;
-  }
-
-  // Hypertensive disorders (37 weeks)
-  if (DIAGNOSIS_PATTERNS.hypertension.test(searchText)) {
-    return GA_RESULTS.hypertension;
-  }
-
-  // DMG checks - more complex logic due to insulin conditions
-  if (DIAGNOSIS_PATTERNS.dmg.test(searchText)) {
-    // DMG with insulin (38 weeks) - must have "insulina" but NOT "sem insulina"
-    if (DIAGNOSIS_PATTERNS.insulin.test(searchText) && 
-        !DIAGNOSIS_PATTERNS.insulinWithout.test(searchText)) {
-      return GA_RESULTS.dmgWithInsulin;
+  
+  // Verificar cada condição na ordem (da mais restritiva para a menos)
+  for (const condition of CLINICAL_CONDITIONS) {
+    if (condition.pattern.test(searchText)) {
+      return {
+        ga: {
+          totalDays: condition.weeks * 7 + condition.days,
+          weeks: condition.weeks,
+          days: condition.days,
+        },
+        diagnosis: condition.name,
+      };
     }
-    // Also check for "com insulina" explicitly
-    if (DIAGNOSIS_PATTERNS.insulinWith.test(searchText)) {
-      return GA_RESULTS.dmgWithInsulin;
-    }
-    // DMG without insulin (40 weeks)
-    return GA_RESULTS.dmgWithoutInsulin;
   }
-
-  // RCF - Restrição de Crescimento Fetal (37 weeks)
-  if (DIAGNOSIS_PATTERNS.rcf.test(searchText)) {
-    return GA_RESULTS.rcf;
-  }
-
-  // Oligoâmnio (37 weeks)
-  if (DIAGNOSIS_PATTERNS.oligoamnio.test(searchText)) {
-    return GA_RESULTS.oligoamnio;
-  }
-
-  // Polidrâmnio (38 weeks)
-  if (DIAGNOSIS_PATTERNS.polidramnio.test(searchText)) {
-    return GA_RESULTS.polidramnio;
-  }
-
-  // Elective indications (39 weeks)
-  if (DIAGNOSIS_PATTERNS.elective.test(searchText)) {
-    return GA_RESULTS.elective;
-  }
-
-  // Default
-  return GA_RESULTS.default;
+  
+  // Padrão: 39 semanas para cesárea eletiva
+  return {
+    ga: { totalDays: 273, weeks: 39, days: 0 },
+    diagnosis: "Padrão (sem condição específica identificada)",
+  };
 };
 
 const calculateMinimumDate = (referenceDate: Date, businessDays: number): Date => {
@@ -592,6 +604,14 @@ const parseDate = (dateStr: string): Date | null => {
   const isValidDate = (date: Date, month: number, day: number): boolean => {
     return !isNaN(date.getTime()) && date.getMonth() === month && date.getDate() === day;
   };
+
+  const isValidYear = (year: number): boolean => {
+    if (year < 2020 || year > 2030) {
+      console.warn(`Ano inválido para DUM/USG: ${year}`);
+      return false;
+    }
+    return true;
+  };
   
   try {
     const parts = dateStr.trim().split("/");
@@ -605,6 +625,7 @@ const parseDate = (dateStr: string): Date | null => {
       const day = part1;
       const month = part2 - 1; // 0-indexed
       const year = part3;
+      if (!isValidYear(year)) return null;
       const date = new Date(year, month, day);
       return isValidDate(date, month, day) ? date : null;
     }
@@ -614,6 +635,7 @@ const parseDate = (dateStr: string): Date | null => {
       const month = part1 - 1; // 0-indexed
       const day = part2;
       const year = part3;
+      if (!isValidYear(year)) return null;
       const date = new Date(year, month, day);
       return isValidDate(date, month, day) ? date : null;
     }
@@ -622,6 +644,7 @@ const parseDate = (dateStr: string): Date | null => {
     const day = part1;
     const month = part2 - 1;
     const year = part3;
+    if (!isValidYear(year)) return null;
     const date = new Date(year, month, day);
     return isValidDate(date, month, day) ? date : null;
     
