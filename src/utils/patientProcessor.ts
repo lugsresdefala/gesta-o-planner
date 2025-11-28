@@ -4,6 +4,13 @@ import { findColumn } from "./columnMatcher";
 
 export { CalendarManager };
 
+// Column name alternatives for maternity preference
+const MATERNITY_COLUMN_KEYWORDS = [
+  'maternidade que a paciente deseja',
+  'maternidade desejada',
+  'maternidade'
+];
+
 export const processPatients = async (
   patients: PatientData[]
 ): Promise<{ results: ProcessedResult[]; calendarManager: CalendarManager }> => {
@@ -22,11 +29,7 @@ export const processPatients = async (
         nome: patient["Nome completo da paciente"],
         carteirinha: patient["CARTEIRINHA (tem na guia que sai do sistema - não inserir CPF)"],
         telefone: patient["Informe dois telefones de contato com o paciente para que ele seja contato pelo hospital"] || undefined,
-        maternidade_desejada: findColumn(patient, [
-          'maternidade que a paciente deseja',
-          'maternidade desejada', 
-          'maternidade'
-        ]),
+        maternidade_desejada: findColumn(patient, MATERNITY_COLUMN_KEYWORDS),
         status: "ERRO",
         observacoes: ["Erro ao processar dados do paciente"],
       });
@@ -87,11 +90,7 @@ const processPatient = (
 ): ProcessedResult => {
   const carteirinha = patient["CARTEIRINHA (tem na guia que sai do sistema - não inserir CPF)"];
   const nome = patient["Nome completo da paciente"];
-  const maternidadeRaw = findColumn(patient, [
-    'maternidade que a paciente deseja',
-    'maternidade desejada', 
-    'maternidade'
-  ]);
+  const maternidadeRaw = findColumn(patient, MATERNITY_COLUMN_KEYWORDS);
   const maternidade = normalizeMaternityName(maternidadeRaw || '');
   
   // Check if already scheduled
