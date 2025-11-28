@@ -503,7 +503,7 @@ const CLINICAL_CONDITIONS: Array<{
   
   // === 35-36 semanas ===
   { name: "Polidrâmnio severo", pattern: /polidr.+sever|mb\s*[>≥]\s*160|mbv\s*[>≥]\s*160/i, weeks: 35, days: 0 },
-  { name: "Trigemelar triamniótico", pattern: /trigem/i, weeks: 35, days: 0 },
+  { name: "Trigemelar triamniótico", pattern: /trigem.+triamni|trigem(?!.+diamni)/i, weeks: 35, days: 0 },
   { name: "Vasa prévia", pattern: /vasa\s*pr[ée]via/i, weeks: 36, days: 0 },
   { name: "Placenta prévia SEM acretismo", pattern: /placenta\s*pr[ée]via|placenta\s+previa/i, weeks: 36, days: 0 },
   { name: "Rotura uterina prévia", pattern: /rotura\s*uterina|ces[aá]rea\s+corporal/i, weeks: 36, days: 0 },
